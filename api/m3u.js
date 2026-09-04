@@ -7,13 +7,10 @@ export default async function handler(req, res) {
     if (!['http:', 'https:'].includes(target.protocol)) {
       return res.status(400).send('Protocolo inválido');
     }
-    if (target.hostname !== 'everywheretv.fun') {
-      return res.status(403).send('Servidor não autorizado');
-    }
 
     const response = await fetch(target, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      cache: 'no-store'
+      headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': '*/*' },
+      redirect: 'follow'
     });
 
     if (!response.ok) {
@@ -25,7 +22,7 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     return res.status(200).send(text);
   } catch (error) {
-    console.error('M3U proxy:', error);
+    console.error('M3U ERROR:', error);
     return res.status(500).send('Erro ao obter a playlist M3U');
   }
 }
