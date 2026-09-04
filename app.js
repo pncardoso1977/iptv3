@@ -196,7 +196,7 @@ function playItem(id,title,type,direct){
         // Prefer HLS for Safari/iOS. If the provider does not expose it,
         // fall back to the standard Xtream TS stream.
         const liveItem=(state.data.live||[]).find(x=>String(x.stream_id)===String(id));
-        const liveExt=String(liveItem?.container_extension || 'm3u8').replace(/^\./,'').toLowerCase();
+        const liveExt=String(liveItem?.container_extension || 'ts').replace(/^\./,'').toLowerCase();
         source=buildXtreamUrl('live',id,liveExt);
       }else{
         const item=(state.data.movies||[]).find(x=>String(x.stream_id)===String(id));
@@ -261,6 +261,15 @@ function openPlayer(url,title,type,id){
     v.load();
     v.play().catch(()=>{});
   };
+
+  const ensureHlsJs=()=>new Promise((resolve)=>{
+    if(window.Hls) return resolve(true);
+    const script=document.createElement('script');
+    script.src='https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js';
+    script.onload=()=>resolve(!!window.Hls);
+    script.onerror=()=>resolve(false);
+    document.head.appendChild(script);
+  });
 
   const startHlsJs=()=>{
     if(!window.Hls || !window.Hls.isSupported()) return false;
@@ -332,9 +341,13 @@ function openPlayer(url,title,type,id){
   // Safari/iOS has native HLS support. Chrome/Edge/Firefox need hls.js.
   if(isHls){
     if(nativeHls){
+      // Safari/iOS: native HLS is the most reliable path.
       startNative();
-    }else if(!startHlsJs()){
-      startNative();
+    }else{
+      // Other browsers: load hls.js only when required.
+      ensureHlsJs().then(ok=>{
+        if(!closed && !(ok && startHlsJs())) startNative();
+      });
     }
   }else{
     startNative();
