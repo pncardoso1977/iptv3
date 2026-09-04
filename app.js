@@ -1,33 +1,20 @@
 'use strict';
 const $=s=>document.querySelector(s), esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const LS={cfg:'etv_cfg_v2',fav:'etv_fav_v2',history:'etv_history_v2',cache:'etv_cache_v2'};
+document.addEventListener('error',event=>{const image=event.target;if(image instanceof HTMLImageElement){image.onerror=null;image.removeAttribute('src');image.classList.add('image-placeholder')}},true);
 const state={page:'home',mode:'xtream',cfg:load(LS.cfg),favorites:load(LS.fav)||[],history:load(LS.history)||[],cache:load(LS.cache)||{},data:{live:[],movies:[],series:[],liveCats:[],movieCats:[],seriesCats:[]},q:'',cat:'all',series:null};
 function load(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch{return null}} function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){if(k===LS.cache){try{localStorage.removeItem(LS.cache)}catch{}}else console.warn('Storage:',e);return false}}
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(window._tt);window._tt=setTimeout(()=>e.classList.remove('show'),2200)}
 function loading(on){if(on&&!$('#loading'))document.body.insertAdjacentHTML('beforeend','<div id="loading" class="loading"><div class="spinner"></div></div>');if(!on)$('#loading')?.remove()}
 function icon(name){return ({home:'⌂',live:'▣',movies:'▤',series:'◉',fav:'♥',settings:'⚙',search:'⌕',play:'▶',back:'‹',refresh:'↻',logout:'⇥'})[name]||'•'}
 function proxyUrl(url){if(!url)return '';try{const u=new URL(url,window.location.href); if(u.origin===window.location.origin && u.pathname.startsWith('/api/')) return u.href; return '/api/proxy?url='+encodeURIComponent(u.href)}catch{return url}}
-function img(url,cls=''){const src=proxyUrl(url);return src?`<img class="${cls}" loading="lazy" src="${esc(src)}" onerror="this.style.display='none'">`:''}
+function img(url,cls=''){const src=proxyUrl(url);return src?`<img class="${cls}" loading="lazy" src="${esc(src)}" onerror="this.onerror=null;this.removeAttribute('src');this.classList.add('image-placeholder')">`:''}
 function api(action,extra={}){
   const c=state.cfg;
 
   if(!c) throw Error('Sem configuração');
 
-  const u=new URL('/api/xtream',window.location.origin);
-
-  u.searchParams.set('username',c.username);
-  u.searchParams.set('password',c.password);
-  u.searchParams.set('server',c.server);
-
-  if(action){
-    u.searchParams.set('action',action);
-  }
-
-  Object.entries(extra).forEach(([k,v])=>{
-    u.searchParams.set(k,v);
-  });
-
-  return fetch(u,{cache:'no-store'}).then(async r=>{
+  return fetch('/api/xtream',{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:c.username,password:c.password,server:c.server,action,...extra})}).then(async r=>{
     const txt=await r.text();
 
     if(!r.ok){
@@ -44,7 +31,7 @@ function api(action,extra={}){
 
 async function loadXtream(){const d=state.data;const jobs=[['liveCats','get_live_categories'],['movieCats','get_vod_categories'],['seriesCats','get_series_categories'],['live','get_live_streams'],['movies','get_vod_streams'],['series','get_series']];for(const [k,a] of jobs){d[k]=await api(a);render();}state.cache={saved:Date.now(),data:null}; try{localStorage.removeItem(LS.cache)}catch{}}
 function normalizeM3U(text){const out=[];let meta={};for(const raw of text.split(/\r?\n/)){const line=raw.trim();if(line.startsWith('#EXTINF:')){const attrs={};const re=/([\w-]+)="([^"]*)"/g;let m;while((m=re.exec(line)))attrs[m[1]]=m[2];meta={name:(line.split(',').slice(1).join(',')||'Sem nome').trim(),logo:attrs['tvg-logo']||'',group:attrs['group-title']||'Outros'};}else if(line&&!line.startsWith('#')&&meta.name){out.push({name:meta.name,stream_icon:meta.logo,group:meta.group,url:line});meta={}}}return out}
-async function loadM3U(){const r=await fetch(state.cfg.url,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);const text=await r.text();const live=normalizeM3U(text);state.data={live,movies:[],series:[],liveCats:[...new Set(live.map(x=>x.group))].map((x,i)=>({category_id:i,category_name:x})),movieCats:[],seriesCats:[]};state.cache={saved:Date.now(),data:null}; try{localStorage.removeItem(LS.cache)}catch{}}
+async function loadM3U(){const r=await fetch(proxyUrl(state.cfg.url),{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);const text=await r.text();const live=normalizeM3U(text);state.data={live,movies:[],series:[],liveCats:[...new Set(live.map(x=>x.group))].map((x,i)=>({category_id:i,category_name:x})),movieCats:[],seriesCats:[]};state.cache={saved:Date.now(),data:null}; try{localStorage.removeItem(LS.cache)}catch{}}
 async function login(){const err=$('#loginErr');const server=$('#server')?.value.trim(),user=$('#user')?.value.trim(),pass=$('#pass')?.value;state.mode=$('.login-tabs .on')?.dataset.mode||'xtream';err.textContent='';if(state.mode==='m3u'){const url=$('#m3uurl')?.value.trim();if(!url)return err.textContent='Introduza o URL da playlist M3U.';state.cfg={url,mode:'m3u'};}else{if(!server||!user||!pass)return err.textContent='Preencha servidor, utilizador e password.';state.cfg={server,username:user,password:pass,mode:'xtream'};}loading(true);try{if(state.mode==='m3u')await loadM3U();else{await api('get_live_categories');await loadXtream()}save(LS.cfg,state.cfg);state.page='home';render();toast('Ligação efetuada');}catch(e){console.error('Login:',e);err.textContent='Não foi possível ligar. '+(e?.message||'Verifique o servidor e as credenciais.');}finally{loading(false)}}
 function nav(){const items=[['home','Início'],['live','Canais'],['movies','Filmes'],['series','Séries'],['fav','Favoritos']];return `<nav class="bottom-nav">${items.map(([p,t])=>`<button class="nav-item ${state.page===p?'active':''}" onclick="go('${p}')"><span class="ico">${icon(p)}</span>${t}</button>`).join('')}</nav>`}
 function topbar(){return `<header class="topbar"><img class="top-logo" src="assets/icon.png"><span class="top-title">Everywhere <b>TV</b> Club</span><span class="grow"></span><button class="round-btn" onclick="openSearch()">${icon('search')}</button><button class="round-btn" onclick="go('settings')">${icon('settings')}</button></header>`}
@@ -77,48 +64,41 @@ function playItem(id,title,type,direct){
     const ext=(item?.container_extension||'mp4').toLowerCase();
     url=`${base}/${type==='movies'?'movie':'series'}/${encodeURIComponent(c.username)}/${encodeURIComponent(c.password)}/${id}.${ext}`;
   }
-  openPlayer(proxyUrl(url),title,type,id);
+  openPlayer(proxyUrl(url),title,type,id,streamKind(url,type,item));
 }
-function playEpisode(id,title,ext){const c=state.cfg;if(!c)return;const url=`${c.server.replace(/\/$/,'')}/series/${encodeURIComponent(c.username)}/${encodeURIComponent(c.password)}/${id}.${ext||'mp4'}`;openPlayer(proxyUrl(url),title,'series',id)}
-function openPlayer(url,title,type,id){
+function playEpisode(id,title,ext){const c=state.cfg;if(!c)return;const url=`${c.server.replace(/\/$/,'')}/series/${encodeURIComponent(c.username)}/${encodeURIComponent(c.password)}/${id}.${ext||'mp4'}`;openPlayer(proxyUrl(url),title,'series',id,streamKind(url,'series',{container_extension:ext}))}
+function streamKind(url,type,item){const ext=String(item?.container_extension||'').toLowerCase();if(/\.m3u8(?:$|[?#])/i.test(url)||ext==='m3u8')return'hls';if(type==='live'&&(ext==='ts'||ext==='mpegts'||/\.(ts|mpeg|mpg)(?:$|[?#])/i.test(url)))return'mpegts';return'mp4'}
+function playerHttpError(status){return ({403:'O servidor IPTV recusou o acesso (HTTP 403).',404:'O stream já não existe no servidor (HTTP 404).',502:'Não foi possível contactar o servidor IPTV (HTTP 502).'})[status]||`O servidor respondeu HTTP ${status}.`}
+async function probeStream(url,session,fail){try{const r=await fetch(url,{method:'HEAD',cache:'no-store'});if(!r.ok&&r.status!==405){fail(playerHttpError(r.status));return false}}catch{fail('Não foi possível validar a ligação ao stream. Verifique a rede ou o proxy.');return false}return !session.destroyed}
+function openPlayer(url,title,type,id,kind){
+  closePlayer(false);
   const h=state.history.find(x=>x.key===type+':'+id);
-  const isLive=type==='live';
-  const isHls=/\.m3u8(?:$|\?)/i.test(url);
-  const isTs=/\.(ts|mpeg|mpg)(?:$|\?)/i.test(url);
+  const session={destroyed:false,mpegts:null,hls:null,retries:0};window.__etvPlayerSession=session;
   document.body.insertAdjacentHTML('beforeend',`<div class="player" id="player"><div class="player-head"><div class="player-name">${esc(title)}</div><button class="player-close" onclick="closePlayer()">×</button></div><video id="video" controls autoplay playsinline preload="metadata" crossorigin="anonymous"></video><div id="playerError" class="player-error"></div></div>`);
   const v=$('#video'),err=$('#playerError');
-  err.textContent=isTs?'A preparar o canal MPEG-TS…':(isHls?'A preparar o canal HLS…':'A preparar o vídeo…');
-  const fail=(msg)=>{err.textContent=msg||'Não foi possível reproduzir este stream.';err.style.display='block';console.error('Erro de reprodução',{url,title,type});};
-  v.onerror=()=>fail('Não foi possível reproduzir este vídeo. O servidor não devolveu um formato compatível.');
-
-  if(isTs && isLive && window.mpegts && typeof window.mpegts.createPlayer==='function'){
-    try{
-      if(!window.mpegts.getFeatureList().mseLivePlayback){
-        fail('Este dispositivo/browser não suporta reprodução MPEG-TS ao vivo. No iPhone é necessário iOS 17.1 ou superior.');
-        return;
-      }
-      window.__etvMpegts?.destroy?.();
-      const player=window.mpegts.createPlayer({type:'mse',isLive:true,cors:true,url},{enableWorker:true,enableWorkerForMSE:true,enableStashBuffer:false,liveBufferLatencyChasing:true});
-      window.__etvMpegts=player;
-      player.on(window.mpegts.Events?.ERROR||'error',(type,detail,info)=>{console.error('mpegts error',{type,detail,info});fail('Não foi possível reproduzir o canal MPEG-TS. Verifique se o stream usa H.264/H.265 + AAC compatível com o dispositivo.');});
-      player.attachMediaElement(v);player.load();
-      Promise.resolve(player.play()).catch(()=>{});
-      return;
-    }catch(e){console.error(e);fail('Falha ao iniciar o leitor MPEG-TS.');return;}
-  }
-
-  if(isHls){
-    if(v.canPlayType('application/vnd.apple.mpegurl')){
-      v.src=url;v.addEventListener('loadedmetadata',()=>v.play().catch(()=>{}),{once:true});
-    }else if(window.Hls && window.Hls.isSupported()){
-      const hls=new window.Hls({enableWorker:true});window.__etvHls=hls;hls.loadSource(url);hls.attachMedia(v);hls.on(window.Hls.Events.MANIFEST_PARSED,()=>v.play().catch(()=>{}));hls.on(window.Hls.Events.ERROR,(e,d)=>{if(d?.fatal)fail('Não foi possível reproduzir o HLS devolvido pelo servidor.');});
-    }else fail('Este dispositivo não suporta HLS neste formato.');
-  }else{
+  const fail=message=>{if(session.destroyed)return;err.textContent=message;err.style.display='block';console.error('Erro de reprodução',{kind,title,type});};
+  const start=async()=>{
+    if(!await probeStream(url,session,fail)||session.destroyed)return;
+    err.textContent=kind==='mpegts'?'A preparar o canal MPEG-TS…':kind==='hls'?'A preparar o canal HLS…':'A preparar o vídeo…';
+    v.onerror=()=>fail(kind==='mp4'?'O vídeo não é compatível ou a resposta Range do servidor é inválida.':`O leitor não conseguiu descodificar este ${kind==='hls'?'HLS':'MPEG-TS'}. Verifique o codec e a resposta do servidor.`);
+    if(kind==='mpegts'){
+      if(!window.mpegts?.createPlayer){fail('A biblioteca local MPEG-TS não foi carregada.');return}
+      let features;try{features=window.mpegts.getFeatureList()}catch{features={}}
+      if(!features.mseLivePlayback){fail('Este dispositivo não disponibiliza MediaSource/Managed Media Source para MPEG-TS. O stream não foi convertido nem confundido com HLS.');return}
+      const reconnect=()=>{if(session.destroyed||session.retries++>=2)return fail('O canal MPEG-TS interrompeu-se após várias tentativas de ligação.');setTimeout(()=>{if(!session.destroyed){try{session.mpegts.unload();session.mpegts.load();session.mpegts.play().catch(()=>{})}catch{fail('Não foi possível restabelecer o canal MPEG-TS.')} }},1200*session.retries)};
+      try{session.mpegts=window.mpegts.createPlayer({type:'mse',url,isLive:true,cors:true},{enableWorker:true,enableWorkerForMSE:true,enableStashBuffer:false,liveBufferLatencyChasing:true});session.mpegts.on(window.mpegts.Events.ERROR,(_type,detail,info)=>{console.error('mpegts error',{detail,info});reconnect()});session.mpegts.attachMediaElement(v);session.mpegts.load();session.mpegts.play().catch(()=>{});return}catch(error){console.error('mpegts start',error);fail('Falha ao iniciar o leitor MPEG-TS.');return}
+    }
+    if(kind==='hls'){
+      if(v.canPlayType('application/vnd.apple.mpegurl')){v.src=url;v.addEventListener('loadedmetadata',()=>v.play().catch(()=>{}),{once:true});return}
+      if(window.Hls?.isSupported()){session.hls=new window.Hls({enableWorker:true});session.hls.loadSource(url);session.hls.attachMedia(v);session.hls.on(window.Hls.Events.MANIFEST_PARSED,()=>v.play().catch(()=>{}));session.hls.on(window.Hls.Events.ERROR,(_event,data)=>{if(data?.fatal)fail(`Falha HLS: ${data.details||'erro fatal do stream'}.`)});return}
+      fail('Este browser não disponibiliza um leitor HLS compatível.');return;
+    }
     v.src=url;v.addEventListener('loadedmetadata',()=>{if(h?.position&&v.duration&&h.position<v.duration-5)v.currentTime=h.position;v.play().catch(()=>{})},{once:true});
-  }
+  };
   v.ontimeupdate=()=>{if(v.duration&&type!=='live'){const item={key:type+':'+id,type,id,name:title,position:v.currentTime,duration:v.duration,updated:Date.now()};state.history=[item,...state.history.filter(x=>x.key!==item.key)].slice(0,30);save(LS.history,state.history)}};
+  start();
 }
-function closePlayer(){$('#player')?.remove();render()}
+function closePlayer(shouldRender=true){const session=window.__etvPlayerSession;if(session){session.destroyed=true;try{session.hls?.destroy()}catch{}try{session.mpegts?.unload();session.mpegts?.detachMediaElement();session.mpegts?.destroy()}catch{}window.__etvPlayerSession=null}const v=$('#video');if(v){v.pause();v.removeAttribute('src');v.load()}$('#player')?.remove();if(shouldRender)render()}
 function toggleFav(k){state.favorites=state.favorites.includes(k)?state.favorites.filter(x=>x!==k):[...state.favorites,k];save(LS.fav,state.favorites);render()}
 function settings(){const c=state.cfg||{};return shell(`<div class="content-head"><h1>Definições</h1></div><div class="setting"><h3>Ligação</h3><div class="value">${esc(state.mode==='m3u'?c.url:c.server||'')}</div></div><div class="setting"><h3>Utilizador</h3><div class="value">${esc(c.username||'Playlist M3U')}</div></div><div class="setting"><h3>Conteúdo em cache</h3><div class="value">${state.cache.saved?new Date(state.cache.saved).toLocaleString('pt-PT'):'—'}</div></div><button class="action" style="width:100%;margin:10px 0" onclick="refresh()">${icon('refresh')} Atualizar conteúdo</button><button class="danger" onclick="logout()">${icon('logout')} Terminar sessão</button>`)}
 async function refresh(){if(!state.cfg)return;loading(true);try{if(state.mode==='m3u')await loadM3U();else await loadXtream();toast('Conteúdo atualizado')}catch{toast('Falha ao atualizar')}finally{loading(false);render()}}

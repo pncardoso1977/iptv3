@@ -4,8 +4,13 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Range,Content-Type,Accept,Origin');
   res.setHeader('Access-Control-Expose-Headers', 'Content-Length,Content-Range,Accept-Ranges,Content-Type');
   if (req.method === 'OPTIONS') return res.status(204).end();
+  if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({error:'Método não suportado'});
   try {
-    const { username, password, action, server, ...extra } = req.query || {};
+    let payload = req.query || {};
+    if (req.method === 'POST') {
+      payload = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
+    }
+    const { username, password, action, server, ...extra } = payload;
     if (!username || !password) return res.status(400).json({error:'Credenciais em falta'});
     if (!server) return res.status(400).json({error:'Servidor em falta'});
     const base = String(server).replace(/\/$/, '');

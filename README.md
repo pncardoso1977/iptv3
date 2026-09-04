@@ -4,11 +4,11 @@ PWA IPTV para Vercel com login Xtream Codes, catálogo Live/Filmes/Séries e rep
 
 ## Reprodução
 
-- Live: a aplicação solicita HLS (`.m3u8`) ao servidor Xtream e passa-o pelo `/api/proxy`.
-- iOS/Safari: usa HLS nativo do Safari.
-- MP4: usa `<video>` com suporte a Range através do proxy.
-- Não é necessário VPS ou FFmpeg externo.
+- Live com `container_extension=ts` (ou URL `.ts`) usa `mpegts.js` local, com MediaSource ou Managed Media Source quando o browser a disponibiliza.
+- HLS real (`.m3u8`) usa HLS nativo no Safari/iOS e `hls.js` local nos restantes browsers.
+- Filmes e episódios MP4 usam `<video>` normal; o proxy preserva Range, Content-Range e Accept-Ranges.
+- O proxy reescreve playlists HLS, incluindo segmentos, `EXT-X-KEY` e `EXT-X-MAP`, sem tentar tratar TS como HLS.
 
-## Importante
+## Build
 
-O servidor Xtream tem de disponibilizar HLS para os canais Live. A playlist `get.php` com `output=mpegts` descreve streams MPEG-TS (`.ts`); para browsers Apple, a app tenta o endpoint HLS equivalente (`.m3u8`). Se o fornecedor não disponibilizar HLS, uma aplicação web sem transcoder externo não consegue transformar MPEG-TS em HLS de forma fiável apenas com HTML5.
+As bibliotecas do leitor estão incluídas em `assets/`; não são carregadas de CDN e não exigem VPS, FFmpeg ou runtime Vercel personalizado.
