@@ -1,0 +1,62 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.16.0
+2 info using node@v24.18.0
+3 silly config load:file:C:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:C:\Users\Worker2\work\EverywhereTVWeb_v2\.npmrc
+5 silly config load:file:C:\Users\Worker2\.npmrc
+6 silly config load:file:C:\Users\Worker2\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm install hls.js@^1.6.15
+8 verbose argv "--cache" ".npm-cache" "install" "hls.js@^1.6.15"
+9 verbose logfile logs-max:10 dir:C:\Users\Worker2\work\EverywhereTVWeb_v2\.npm-cache\_logs\2026-09-04T15_05_52_630Z-
+10 verbose logfile C:\Users\Worker2\work\EverywhereTVWeb_v2\.npm-cache\_logs\2026-09-04T15_05_52_630Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+13 silly idealTree buildDeps
+14 silly fetch manifest mpegts.js@1.8.0
+15 silly packumentCache full:https://registry.npmjs.org/mpegts.js cache-miss
+16 http fetch GET 200 https://registry.npmjs.org/npm 198ms
+17 http fetch GET 200 https://registry.npmjs.org/mpegts.js 125ms (cache miss)
+18 silly packumentCache full:https://registry.npmjs.org/mpegts.js set size:undefined disposed:false
+19 silly fetch manifest hls.js@^1.6.15
+20 silly packumentCache full:https://registry.npmjs.org/hls.js cache-miss
+21 http fetch GET 200 https://registry.npmjs.org/hls.js 305ms (cache miss)
+22 silly packumentCache full:https://registry.npmjs.org/hls.js set size:undefined disposed:false
+23 silly placeDep ROOT hls.js@1.7.2 OK for:  want: ^1.6.15
+24 silly placeDep ROOT mpegts.js@1.8.0 OK for:  want: 1.8.0
+25 silly fetch manifest es6-promise@^4.2.5
+26 silly packumentCache full:https://registry.npmjs.org/es6-promise cache-miss
+27 silly fetch manifest webworkify-webpack@github:xqq/webworkify-webpack
+28 http fetch GET 200 https://registry.npmjs.org/es6-promise 222ms (cache miss)
+29 silly packumentCache full:https://registry.npmjs.org/es6-promise set size:undefined disposed:false
+30 silly fetch manifest webworkify-webpack@github:xqq/webworkify-webpack
+31 silly placeDep ROOT es6-promise@4.2.8 OK for: mpegts.js@1.8.0 want: ^4.2.5
+32 silly placeDep node_modules/mpegts.js webworkify-webpack@ OK for: mpegts.js@1.8.0 want: github:xqq/webworkify-webpack
+33 verbose stack Error: An unknown git error occurred
+33 verbose stack     at makeError (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\git\lib\make-error.js:28:13)
+33 verbose stack     at C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\git\lib\spawn.js:37:26
+33 verbose stack     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+33 verbose stack     at async RetryOperation.<anonymous> (C:\Program Files\nodejs\node_modules\npm\node_modules\@gar\promise-retry\lib\index.js:46:24)
+34 error code 128
+35 error An unknown git error occurred
+36 error command git --no-replace-objects ls-remote ssh://git@github.com/xqq/webworkify-webpack.git
+37 error Could not create directory '/c/Users/Worker2/.ssh' (Permission denied).
+37 error Failed to add the host to the list of known hosts (/c/Users/Worker2/.ssh/known_hosts).
+37 error git@github.com: Permission denied (publickey).
+37 error fatal: Could not read from remote repository.
+37 error
+37 error Please make sure you have the correct access rights
+37 error and the repository exists.
+38 silly unfinished npm timer reify 1788534353363
+39 silly unfinished npm timer reify:loadTrees 1788534353370
+40 verbose cwd C:\Users\Worker2\work\EverywhereTVWeb_v2
+41 verbose os Windows_NT 10.0.26200
+42 verbose node v24.18.0
+43 verbose npm  v11.16.0
+44 notice
+44 notice New major version of npm available! 11.16.0 -> 12.0.2
+44 notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.2
+44 notice To update run: npm install -g npm@12.0.2
+44 notice  { force: true, Symbol(proc-log.meta): true }
+45 verbose exit 128
+46 verbose code 128
+47 error A complete log of this run can be found in: C:\Users\Worker2\work\EverywhereTVWeb_v2\.npm-cache\_logs\2026-09-04T15_05_52_630Z-debug-0.log

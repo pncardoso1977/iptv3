@@ -1,0 +1,149 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.16.0
+2 info using node@v24.18.0
+3 silly config load:file:C:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:C:\Users\Worker2\work\EverywhereTVWeb_v2\.npmrc
+5 silly config load:file:C:\Users\Worker2\.npmrc
+6 silly config load:file:C:\Users\Worker2\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm pack mpegts.js@1.8.0
+8 verbose argv "--cache" ".npm-cache" "pack" "mpegts.js@1.8.0"
+9 verbose logfile logs-max:10 dir:C:\Users\Worker2\work\EverywhereTVWeb_v2\.npm-cache\_logs\2026-09-04T15_06_53_753Z-
+10 verbose logfile C:\Users\Worker2\work\EverywhereTVWeb_v2\.npm-cache\_logs\2026-09-04T15_06_53_753Z-debug-0.log
+11 silly logfile done cleaning log files
+12 http fetch GET 200 https://registry.npmjs.org/mpegts.js 321ms (cache miss)
+13 http fetch GET 200 https://registry.npmjs.org/mpegts.js 43ms (cache revalidated)
+14 http fetch GET 200 https://registry.npmjs.org/mpegts.js/-/mpegts.js-1.8.0.tgz 54ms (cache miss)
+15 notice
+16 notice 📦  mpegts.js@1.8.0
+17 notice Tarball Contents
+18 notice 11.4kB LICENSE
+18 notice 5.5kB README_ja.md
+18 notice 5.1kB README_zh.md
+18 notice 5.4kB README.md
+18 notice 15.6kB d.ts/mpegts.d.ts
+18 notice 248B d.ts/src/core/mse-events.d.ts
+18 notice 962B d.ts/src/core/transmuxing-events.d.ts
+18 notice 1.4kB d.ts/src/demux/aac.d.ts
+18 notice 2.1kB d.ts/src/demux/ac3.d.ts
+18 notice 2.6kB d.ts/src/demux/av1-parser.d.ts
+18 notice 366B d.ts/src/demux/av1.d.ts
+18 notice 1.9kB d.ts/src/demux/base-demuxer.d.ts
+18 notice 989B d.ts/src/demux/h264.d.ts
+18 notice 2.2kB d.ts/src/demux/h265.d.ts
+18 notice 376B d.ts/src/demux/klv.d.ts
+18 notice 132B d.ts/src/demux/mp3.d.ts
+18 notice 569B d.ts/src/demux/mpeg4-audio.d.ts
+18 notice 2.0kB d.ts/src/demux/pat-pmt-pes.d.ts
+18 notice 858B d.ts/src/demux/patpmt.d.ts
+18 notice 301B d.ts/src/demux/pes-private-data.d.ts
+18 notice 7.3kB d.ts/src/demux/scte35.d.ts
+18 notice 519B d.ts/src/demux/smpte2038.d.ts
+18 notice 3.0kB d.ts/src/demux/ts-demuxer.d.ts
+18 notice 344B d.ts/src/player/live-latency-chaser.d.ts
+18 notice 295B d.ts/src/player/live-latency-synchronizer.d.ts
+18 notice 701B d.ts/src/player/loading-controller.d.ts
+18 notice 912B d.ts/src/player/mse-player.d.ts
+18 notice 111B d.ts/src/player/player-engine-dedicated-thread-worker.d.ts
+18 notice 1.6kB d.ts/src/player/player-engine-dedicated-thread.d.ts
+18 notice 1.6kB d.ts/src/player/player-engine-main-thread.d.ts
+18 notice 922B d.ts/src/player/player-engine-worker-cmd-def.d.ts
+18 notice 2.3kB d.ts/src/player/player-engine-worker-msg-def.d.ts
+18 notice 113B d.ts/src/player/player-engine-worker.d.ts
+18 notice 547B d.ts/src/player/player-engine.d.ts
+18 notice 823B d.ts/src/player/player-events.d.ts
+18 notice 762B d.ts/src/player/seeking-handler.d.ts
+18 notice 442B d.ts/src/player/startup-stall-jumper.d.ts
+18 notice 105B d.ts/src/utils/typedarray-equality.d.ts
+18 notice 273.0kB dist/mpegts.js
+18 notice 1.0MB dist/mpegts.js.map
+18 notice 1.5kB package.json
+18 notice 1.9kB src/config.js
+18 notice 3.7kB src/core/features.js
+18 notice 3.9kB src/core/media-info.js
+18 notice 6.6kB src/core/media-segment-info.js
+18 notice 22.9kB src/core/mse-controller.js
+18 notice 900B src/core/mse-events.ts
+18 notice 11.2kB src/core/transmuxer.js
+18 notice 20.8kB src/core/transmuxing-controller.js
+18 notice 1.6kB src/core/transmuxing-events.ts
+18 notice 8.4kB src/core/transmuxing-worker.js
+18 notice 14.7kB src/demux/aac.ts
+18 notice 11.8kB src/demux/ac3.ts
+18 notice 8.8kB src/demux/amf-parser.js
+18 notice 24.5kB src/demux/av1-parser.ts
+18 notice 3.2kB src/demux/av1.ts
+18 notice 2.5kB src/demux/base-demuxer.ts
+18 notice 844B src/demux/demux-errors.js
+18 notice 3.8kB src/demux/exp-golomb.js
+18 notice 68.7kB src/demux/flv-demuxer.js
+18 notice 5.4kB src/demux/h264.ts
+18 notice 21.1kB src/demux/h265-parser.js
+18 notice 7.9kB src/demux/h265.ts
+18 notice 900B src/demux/klv.ts
+18 notice 125B src/demux/mp3.ts
+18 notice 634B src/demux/mpeg4-audio.ts
+18 notice 2.3kB src/demux/pat-pmt-pes.ts
+18 notice 360B src/demux/pes-private-data.ts
+18 notice 23.7kB src/demux/scte35.ts
+18 notice 2.7kB src/demux/smpte2038.ts
+18 notice 10.7kB src/demux/sps-parser.js
+18 notice 89.6kB src/demux/ts-demuxer.ts
+18 notice 122B src/index.js
+18 notice 9.8kB src/io/fetch-stream-loader.js
+18 notice 22.6kB src/io/io-controller.js
+18 notice 3.4kB src/io/loader.js
+18 notice 2.4kB src/io/param-seek-handler.js
+18 notice 1.4kB src/io/range-seek-handler.js
+18 notice 3.0kB src/io/speed-sampler.js
+18 notice 4.2kB src/io/websocket-loader.js
+18 notice 6.7kB src/io/xhr-moz-chunked-loader.js
+18 notice 10.3kB src/io/xhr-msstream-loader.js
+18 notice 11.7kB src/io/xhr-range-loader.js
+18 notice 2.7kB src/mpegts.js
+18 notice 2.3kB src/player/live-latency-chaser.ts
+18 notice 2.6kB src/player/live-latency-synchronizer.ts
+18 notice 4.7kB src/player/loading-controller.ts
+18 notice 4.3kB src/player/mse-player.ts
+18 notice 8.1kB src/player/native-player.js
+18 notice 17.4kB src/player/player-engine-dedicated-thread.ts
+18 notice 17.1kB src/player/player-engine-main-thread.ts
+18 notice 1.6kB src/player/player-engine-worker-cmd-def.ts
+18 notice 3.1kB src/player/player-engine-worker-msg-def.ts
+18 notice 13.0kB src/player/player-engine-worker.ts
+18 notice 1.2kB src/player/player-engine.ts
+18 notice 1.4kB src/player/player-errors.js
+18 notice 1.5kB src/player/player-events.ts
+18 notice 7.6kB src/player/seeking-handler.ts
+18 notice 3.3kB src/player/startup-stall-jumper.ts
+18 notice 3.9kB src/remux/aac-silent.js
+18 notice 30.6kB src/remux/mp4-generator.js
+18 notice 28.9kB src/remux/mp4-remuxer.js
+18 notice 3.7kB src/utils/browser.js
+18 notice 1.5kB src/utils/exception.js
+18 notice 3.1kB src/utils/logger.js
+18 notice 4.4kB src/utils/logging-control.js
+18 notice 2.2kB src/utils/polyfill.js
+18 notice 2.1kB src/utils/typedarray-equality.ts
+18 notice 2.9kB src/utils/utf8-conv.js
+18 notice 409B tsconfig.json
+18 notice 33B tslint.json
+18 notice 58B types/index.d.ts
+18 notice 205B types/test-flv.ts
+18 notice 508B types/tsconfig.json
+18 notice 1.3kB webpack.config.js
+19 notice Tarball Details
+20 notice name: mpegts.js
+21 notice version: 1.8.0
+22 notice filename: mpegts.js-1.8.0.tgz
+23 notice package size: 389.8 kB
+24 notice unpacked size: 2.0 MB
+25 notice shasum: b944751df0e811be880c0d1e32dcd721f5ff9550
+26 notice integrity: sha512-ZtujqtmTjWgcD[...]rfbWi3qqEircg==
+27 notice total files: 115
+28 notice
+29 verbose cwd C:\Users\Worker2\work\EverywhereTVWeb_v2
+30 verbose os Windows_NT 10.0.26200
+31 verbose node v24.18.0
+32 verbose npm  v11.16.0
+33 verbose exit 0
+34 info ok
