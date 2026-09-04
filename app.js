@@ -7,7 +7,39 @@ function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');cl
 function loading(on){if(on&&!$('#loading'))document.body.insertAdjacentHTML('beforeend','<div id="loading" class="loading"><div class="spinner"></div></div>');if(!on)$('#loading')?.remove()}
 function icon(name){return ({home:'⌂',live:'▣',movies:'▤',series:'◉',fav:'♥',settings:'⚙',search:'⌕',play:'▶',back:'‹',refresh:'↻',logout:'⇥'})[name]||'•'}
 function img(url,cls=''){return url?`<img class="${cls}" loading="lazy" src="${esc(url)}" onerror="this.style.display='none'">`:''}
-function api(action,extra={}){const c=state.cfg;if(!c)throw Error('Sem configuração');let base=c.server.trim().replace(/\/$/,'');const u=new URL(base+'/player_api.php');u.searchParams.set('username',c.username);u.searchParams.set('password',c.password);if(action)u.searchParams.set('action',action);Object.entries(extra).forEach(([k,v])=>u.searchParams.set(k,v));return fetch(u,{cache:'no-store'}).then(async r=>{if(!r.ok)throw Error('HTTP '+r.status);const txt=await r.text();try{return JSON.parse(txt)}catch{throw Error('Resposta inválida')}})}
+function api(action,extra={}){
+  const c=state.cfg;
+
+  if(!c) throw Error('Sem configuração');
+
+  const u=new URL('/api/xtream',window.location.origin);
+
+  u.searchParams.set('username',c.username);
+  u.searchParams.set('password',c.password);
+
+  if(action){
+    u.searchParams.set('action',action);
+  }
+
+  Object.entries(extra).forEach(([k,v])=>{
+    u.searchParams.set(k,v);
+  });
+
+  return fetch(u,{cache:'no-store'}).then(async r=>{
+    const txt=await r.text();
+
+    if(!r.ok){
+      throw Error('HTTP '+r.status+' '+txt);
+    }
+
+    try{
+      return JSON.parse(txt);
+    }catch{
+      throw Error('Resposta inválida');
+    }
+  });
+}
+
 async function loadXtream(){const d=state.data;const jobs=[['liveCats','get_live_categories'],['movieCats','get_vod_categories'],['seriesCats','get_series_categories'],['live','get_live_streams'],['movies','get_vod_streams'],['series','get_series']];for(const [k,a] of jobs){d[k]=await api(a);render();}state.cache={saved:Date.now(),data:d};save(LS.cache,state.cache)}
 function normalizeM3U(text){const out=[];let meta={};for(const raw of text.split(/\r?\n/)){const line=raw.trim();if(line.startsWith('#EXTINF:')){const attrs={};const re=/([\w-]+)="([^"]*)"/g;let m;while((m=re.exec(line)))attrs[m[1]]=m[2];meta={name:(line.split(',').slice(1).join(',')||'Sem nome').trim(),logo:attrs['tvg-logo']||'',group:attrs['group-title']||'Outros'};}else if(line&&!line.startsWith('#')&&meta.name){out.push({name:meta.name,stream_icon:meta.logo,group:meta.group,url:line});meta={}}}return out}
 async function loadM3U(){const r=await fetch(state.cfg.url,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);const text=await r.text();const live=normalizeM3U(text);state.data={live,movies:[],series:[],liveCats:[...new Set(live.map(x=>x.group))].map((x,i)=>({category_id:i,category_name:x})),movieCats:[],seriesCats:[]};state.cache={saved:Date.now(),data:state.data};save(LS.cache,state.cache)}
