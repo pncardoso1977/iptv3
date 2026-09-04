@@ -195,7 +195,9 @@ function playItem(id,title,type,direct){
       if(type==='live'){
         // Prefer HLS for Safari/iOS. If the provider does not expose it,
         // fall back to the standard Xtream TS stream.
-        source=buildXtreamUrl('live',id,'m3u8');
+        const liveItem=(state.data.live||[]).find(x=>String(x.stream_id)===String(id));
+        const liveExt=liveItem?.container_extension || 'm3u8';
+        source=buildXtreamUrl('live',id,liveExt);
       }else{
         const item=(state.data.movies||[]).find(x=>String(x.stream_id)===String(id));
         const ext=item?.container_extension||'mp4';
@@ -323,7 +325,7 @@ function openPlayer(url,title,type,id){
 
     showError(isHls
       ? 'O servidor devolveu um HLS que o navegador não conseguiu interpretar.'
-      : 'O servidor não forneceu um formato de vídeo compatível com Safari/iOS.');
+      : 'O servidor IPTV não devolveu um vídeo que o navegador consiga abrir.');
   });
 
   // Safari/iOS has native HLS support. Chrome/Edge/Firefox need hls.js.
