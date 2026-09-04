@@ -67,11 +67,10 @@ function playItem(id,title,type,direct){
   let url=direct;
   const item=(state.data[type]||[]).find(x=>String(x.stream_id||x.id)===String(id));
   if(type==='live'){
-    if(url){
-      try{const u=new URL(url); if(/\.(ts|mpeg|mpg)(?:$|\?)/i.test(u.pathname)) u.pathname=u.pathname.replace(/\.(ts|mpeg|mpg)$/i,'.m3u8'); url=u.href;}catch{}
-    }else{
+    if(!url){
       const base=c.server.replace(/\/$/,'');
-      url=`${base}/live/${encodeURIComponent(c.username)}/${encodeURIComponent(c.password)}/${id}.m3u8`;
+      const ext=String(item?.container_extension||'ts').toLowerCase();
+      url=`${base}/live/${encodeURIComponent(c.username)}/${encodeURIComponent(c.password)}/${id}.${ext||'ts'}`;
     }
   }else if(!url){
     const base=c.server.replace(/\/$/,'');
@@ -83,23 +82,39 @@ function playItem(id,title,type,direct){
 function playEpisode(id,title,ext){const c=state.cfg;if(!c)return;const url=`${c.server.replace(/\/$/,'')}/series/${encodeURIComponent(c.username)}/${encodeURIComponent(c.password)}/${id}.${ext||'mp4'}`;openPlayer(proxyUrl(url),title,'series',id)}
 function openPlayer(url,title,type,id){
   const h=state.history.find(x=>x.key===type+':'+id);
+  const isLive=type==='live';
   const isHls=/\.m3u8(?:$|\?)/i.test(url);
+  const isTs=/\.(ts|mpeg|mpg)(?:$|\?)/i.test(url);
   document.body.insertAdjacentHTML('beforeend',`<div class="player" id="player"><div class="player-head"><div class="player-name">${esc(title)}</div><button class="player-close" onclick="closePlayer()">×</button></div><video id="video" controls autoplay playsinline preload="metadata" crossorigin="anonymous"></video><div id="playerError" class="player-error"></div></div>`);
-  const v=$('#video'), err=$('#playerError');
-  err.textContent=isHls?'A preparar o canal…':'A preparar o vídeo…';
-  if(h?.position&&type!=='live')v.currentTime=h.position;
-  const fail=()=>{err.textContent='Não foi possível reproduzir este stream. O servidor poderá não disponibilizar HLS compatível com Safari.';err.style.display='block';};
-  v.onerror=fail;
-  if(isHls && v.canPlayType('application/vnd.apple.mpegurl')){
-    v.src=url;
-    v.addEventListener('loadedmetadata',()=>{if(h?.position&&h.position<v.duration-5)v.currentTime=h.position;v.play().catch(()=>{})},{once:true});
-  }else if(isHls){
-    // Native HLS is preferred. hls.js is deliberately not required: the app remains self-contained.
-    v.src=url;
-    v.addEventListener('loadedmetadata',()=>v.play().catch(()=>{}),{once:true});
+  const v=$('#video'),err=$('#playerError');
+  err.textContent=isTs?'A preparar o canal MPEG-TS…':(isHls?'A preparar o canal HLS…':'A preparar o vídeo…');
+  const fail=(msg)=>{err.textContent=msg||'Não foi possível reproduzir este stream.';err.style.display='block';console.error('Erro de reprodução',{url,title,type});};
+  v.onerror=()=>fail('Não foi possível reproduzir este vídeo. O servidor não devolveu um formato compatível.');
+
+  if(isTs && isLive && window.mpegts && typeof window.mpegts.createPlayer==='function'){
+    try{
+      if(!window.mpegts.getFeatureList().mseLivePlayback){
+        fail('Este dispositivo/browser não suporta reprodução MPEG-TS ao vivo. No iPhone é necessário iOS 17.1 ou superior.');
+        return;
+      }
+      window.__etvMpegts?.destroy?.();
+      const player=window.mpegts.createPlayer({type:'mse',isLive:true,cors:true,url},{enableWorker:true,enableWorkerForMSE:true,enableStashBuffer:false,liveBufferLatencyChasing:true});
+      window.__etvMpegts=player;
+      player.on(window.mpegts.Events?.ERROR||'error',(type,detail,info)=>{console.error('mpegts error',{type,detail,info});fail('Não foi possível reproduzir o canal MPEG-TS. Verifique se o stream usa H.264/H.265 + AAC compatível com o dispositivo.');});
+      player.attachMediaElement(v);player.load();
+      Promise.resolve(player.play()).catch(()=>{});
+      return;
+    }catch(e){console.error(e);fail('Falha ao iniciar o leitor MPEG-TS.');return;}
+  }
+
+  if(isHls){
+    if(v.canPlayType('application/vnd.apple.mpegurl')){
+      v.src=url;v.addEventListener('loadedmetadata',()=>v.play().catch(()=>{}),{once:true});
+    }else if(window.Hls && window.Hls.isSupported()){
+      const hls=new window.Hls({enableWorker:true});window.__etvHls=hls;hls.loadSource(url);hls.attachMedia(v);hls.on(window.Hls.Events.MANIFEST_PARSED,()=>v.play().catch(()=>{}));hls.on(window.Hls.Events.ERROR,(e,d)=>{if(d?.fatal)fail('Não foi possível reproduzir o HLS devolvido pelo servidor.');});
+    }else fail('Este dispositivo não suporta HLS neste formato.');
   }else{
-    v.src=url;
-    v.addEventListener('loadedmetadata',()=>{if(h?.position&&h.position<v.duration-5)v.currentTime=h.position;v.play().catch(()=>{})},{once:true});
+    v.src=url;v.addEventListener('loadedmetadata',()=>{if(h?.position&&v.duration&&h.position<v.duration-5)v.currentTime=h.position;v.play().catch(()=>{})},{once:true});
   }
   v.ontimeupdate=()=>{if(v.duration&&type!=='live'){const item={key:type+':'+id,type,id,name:title,position:v.currentTime,duration:v.duration,updated:Date.now()};state.history=[item,...state.history.filter(x=>x.key!==item.key)].slice(0,30);save(LS.history,state.history)}};
 }

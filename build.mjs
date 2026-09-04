@@ -1,0 +1,10 @@
+import fs from 'node:fs';
+import path from 'node:path';
+const root=process.cwd();
+const src=path.join(root,'node_modules','mpegts.js','dist','mpegts.min.js');
+const dstDir=path.join(root,'assets');
+const dst=path.join(dstDir,'mpegts.min.js');
+if(!fs.existsSync(src)) throw new Error('mpegts.js não foi instalado');
+fs.mkdirSync(dstDir,{recursive:true});
+fs.copyFileSync(src,dst);
+console.log('Bundled mpegts.js -> assets/mpegts.min.js');
