@@ -6,7 +6,22 @@ function load(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch{re
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(window._tt);window._tt=setTimeout(()=>e.classList.remove('show'),2200)}
 function loading(on){if(on&&!$('#loading'))document.body.insertAdjacentHTML('beforeend','<div id="loading" class="loading"><div class="spinner"></div></div>');if(!on)$('#loading')?.remove()}
 function icon(name){return ({home:'⌂',live:'▣',movies:'▤',series:'◉',fav:'♥',settings:'⚙',search:'⌕',play:'▶',back:'‹',refresh:'↻',logout:'⇥'})[name]||'•'}
-function img(url,cls=''){return url?`<img class="${cls}" loading="lazy" src="${esc(url)}" onerror="this.style.display='none'">`:''}
+function proxiedAssetUrl(url){
+  if(!url) return '';
+  try{
+    const u=new URL(url,window.location.href);
+    if(u.protocol==='http:' || u.protocol==='https:'){
+      const p=new URL('/api/proxy',window.location.origin);
+      p.searchParams.set('url',u.toString());
+      return p.toString();
+    }
+  }catch{}
+  return url;
+}
+function img(url,cls=''){
+  const src=proxiedAssetUrl(url);
+  return src?`<img class="${cls}" loading="lazy" src="${esc(src)}" onerror="this.style.display='none'">`:''
+}
 function api(action,extra={}){
   const c=state.cfg;
 
@@ -16,6 +31,7 @@ function api(action,extra={}){
 
   u.searchParams.set('username',c.username);
   u.searchParams.set('password',c.password);
+  if(c.server) u.searchParams.set('server',c.server);
 
   if(action){
     u.searchParams.set('action',action);
@@ -93,9 +109,8 @@ async function loadM3U(){
 }
 async function login(){const err=$('#loginErr');const server=$('#server')?.value.trim(),user=$('#user')?.value.trim(),pass=$('#pass')?.value;state.mode=$('.login-tabs .on')?.dataset.mode||'xtream';err.textContent='';if(state.mode==='m3u'){const url=$('#m3uurl')?.value.trim();if(!url)return err.textContent='Introduza o URL da playlist M3U.';state.cfg={url,mode:'m3u'};}else{if(!server||!user||!pass)return err.textContent='Preencha servidor, utilizador e password.';state.cfg={server,username:user,password:pass,mode:'xtream'};}loading(true);try{if(state.mode==='m3u')await loadM3U();else{await api('get_live_categories');await loadXtream()}save(LS.cfg,state.cfg);state.page='home';render();toast('Ligação efetuada');}catch(e){console.error('Erro de login/carregamento:',e);err.textContent='Não foi possível carregar o conteúdo. Verifique a ligação ao servidor.';}finally{loading(false)}}
 function nav(){const items=[['home','Início'],['live','Canais'],['movies','Filmes'],['series','Séries'],['fav','Favoritos']];return `<nav class="bottom-nav">${items.map(([p,t])=>`<button class="nav-item ${state.page===p?'active':''}" onclick="go('${p}')"><span class="ico">${icon(p)}</span>${t}</button>`).join('')}</nav>`}
-function side(){const items=[['home','Início'],['live','Canais em direto'],['movies','Filmes'],['series','Séries'],['fav','Favoritos'],['settings','Definições']];return `<aside class="desktop-nav"><img class="side-logo" src="assets/icon.png">${items.map(([p,t])=>`<button class="side-item ${state.page===p?'active':''}" onclick="go('${p}')"><span>${icon(p)}</span>${t}</button>`).join('')}</aside>`}
 function topbar(){return `<header class="topbar"><img class="top-logo" src="assets/icon.png"><span class="top-title">Everywhere <b>TV</b> Club</span><span class="grow"></span><button class="round-btn" onclick="openSearch()">${icon('search')}</button><button class="round-btn" onclick="go('settings')">${icon('settings')}</button></header>`}
-function shell(body){return `<div class="app">${side()}<div class="main">${topbar()}<div class="content">${body}</div>${nav()}</div></div>`}
+function shell(body){return `<div class="app"><div class="main">${topbar()}<div class="content">${body}</div>${nav()}</div></div>`}
 function loginView(){return `<main class="login"><section class="login-card"><img class="login-logo" src="assets/home_banner.png"><div class="login-tabs"><button class="on" data-mode="xtream" onclick="setLoginMode('xtream')">Xtream Codes</button><button data-mode="m3u" onclick="setLoginMode('m3u')">Playlist M3U</button></div><div id="loginFields"><div class="field"><input id="server" inputmode="url" placeholder="Servidor (https://...)" value="${esc(state.cfg?.server||'')}"></div><div class="field"><input id="user" autocomplete="username" placeholder="Utilizador" value="${esc(state.cfg?.username||'')}"></div><div class="field"><input id="pass" type="password" autocomplete="current-password" placeholder="Password"></div></div><div id="loginErr" class="error"></div><button class="primary" onclick="login()">Entrar</button><p class="hint">A versão iOS necessita de HTTPS. Se o servidor não disponibilizar CORS, será necessário um proxy HTTPS.</p></section></main>`}
 function setLoginMode(m){document.querySelectorAll('.login-tabs button').forEach(b=>b.classList.toggle('on',b.dataset.mode===m));$('#loginFields').innerHTML=m==='m3u'?'<div class="field"><input id="m3uurl" inputmode="url" placeholder="URL da playlist .m3u"></div>':'<div class="field"><input id="server" inputmode="url" placeholder="Servidor (https://...)"></div><div class="field"><input id="user" autocomplete="username" placeholder="Utilizador"></div><div class="field"><input id="pass" type="password" autocomplete="current-password" placeholder="Password"></div>'}
 function quick(){return `<div class="quick-grid">${[['live','Canais em direto','Ver televisão'],['movies','Filmes','Catálogo de filmes'],['series','Séries','Temporadas e episódios'],['fav','Favoritos','Os seus conteúdos']].map(([p,t,s])=>`<button class="quick" onclick="go('${p}')"><span class="quick-icon">${icon(p)}</span><span><strong>${t}</strong><small>${s}</small></span></button>`).join('')}</div>`}
@@ -163,9 +178,18 @@ function openPlayer(url,title,type,id){
   const v=$('#video');
   const error=$('#playerError');
   error.style.display='none';
-
+  let failed=false;
+  let fallbackTried=false;
   const isHls=/\.m3u8(?:$|[?#])/i.test(url);
-  v.src=url;
+
+  const setSource=(src)=>{
+    v.pause();
+    v.removeAttribute('src');
+    v.load();
+    v.src=src;
+    v.load();
+    v.play().catch(()=>{});
+  };
 
   if(h?.position&&type!=='live'){
     v.addEventListener('loadedmetadata',()=>{
@@ -178,20 +202,30 @@ function openPlayer(url,title,type,id){
   },{once:true});
 
   v.addEventListener('error',()=>{
-    console.error('Erro de reprodução', {src:url, code:v.error?.code, message:v.error?.message, hls:isHls});
+    const code=v.error?.code;
+    console.error('Erro de reprodução',{src:v.currentSrc||url,code,message:v.error?.message,hls:isHls});
+
+    // Some Xtream servers expose live channels as TS when their .m3u8 endpoint
+    // is unavailable. Try the TS URL once, still through the HTTPS proxy.
+    if(type==='live' && isHls && !fallbackTried && state.mode==='xtream'){
+      fallbackTried=true;
+      try{
+        const c=state.cfg;
+        const ts=proxiedStreamUrl(buildXtreamUrl('live',id,'ts'));
+        error.textContent='HLS indisponível. A tentar o stream TS…';
+        error.style.display='block';
+        setSource(ts);
+        return;
+      }catch{}
+    }
+
     error.textContent=isHls
-      ? 'O servidor não forneceu um stream HLS compatível com Safari/iOS.'
+      ? 'O servidor devolveu um HLS que o Safari não conseguiu interpretar.'
       : 'O servidor não forneceu um formato de vídeo compatível com Safari/iOS.';
     error.style.display='block';
   });
 
-  v.ontimeupdate=()=>{
-    if(v.duration&&type!=='live'){
-      const item={key:type+':'+id,type,id,name:title,position:v.currentTime,duration:v.duration,updated:Date.now()};
-      state.history=[item,...state.history.filter(x=>x.key!==item.key)].slice(0,30);
-      save(LS.history,state.history);
-    }
-  };
+  setSource(url);
 }
 
 function closePlayer(){$('#player')?.remove();render()}

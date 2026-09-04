@@ -1,12 +1,13 @@
 export default async function handler(req, res) {
   try {
-    const { username, password, action, ...extra } = req.query;
+    const { username, password, action, server, ...extra } = req.query;
 
     if (!username || !password) {
       return res.status(400).json({ error: 'Credenciais em falta' });
     }
 
-    const url = new URL('http://everywheretv.fun:8080/player_api.php');
+    const base = server || 'http://everywheretv.fun:8080';
+    const url = new URL(base.replace(/\/$/, '') + '/player_api.php');
 
     url.searchParams.set('username', username);
     url.searchParams.set('password', password);
