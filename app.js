@@ -107,7 +107,52 @@ async function loadM3U(){
   state.cache={saved:Date.now(),data:state.data};
   save(LS.cache,state.cache);
 }
-async function login(){const err=$('#loginErr');const server=$('#server')?.value.trim(),user=$('#user')?.value.trim(),pass=$('#pass')?.value;state.mode=$('.login-tabs .on')?.dataset.mode||'xtream';err.textContent='';if(state.mode==='m3u'){const url=$('#m3uurl')?.value.trim();if(!url)return err.textContent='Introduza o URL da playlist M3U.';state.cfg={url,mode:'m3u'};}else{if(!server||!user||!pass)return err.textContent='Preencha servidor, utilizador e password.';state.cfg={server,username:user,password:pass,mode:'xtream'};}loading(true);try{if(state.mode==='m3u')await loadM3U();else{await api('get_live_categories');await loadXtream()}save(LS.cfg,state.cfg);state.page='home';render();toast('Ligação efetuada');}catch(e){console.error('Erro de login/carregamento:',e);err.textContent='Não foi possível carregar o conteúdo. Verifique a ligação ao servidor.';}finally{loading(false)}}
+async function login(){
+  const err=$('#loginErr');
+  const server=$('#server')?.value.trim();
+  const user=$('#user')?.value.trim();
+  const pass=$('#pass')?.value;
+  state.mode=$('.login-tabs .on')?.dataset.mode||'xtream';
+  err.textContent='';
+
+  if(state.mode==='m3u'){
+    const url=$('#m3uurl')?.value.trim();
+    if(!url)return err.textContent='Introduza o URL da playlist M3U.';
+    state.cfg={url,mode:'m3u'};
+  }else{
+    if(!server||!user||!pass)return err.textContent='Preencha servidor, utilizador e password.';
+    state.cfg={server,username:user,password:pass,mode:'xtream'};
+  }
+
+  loading(true);
+  try{
+    if(state.mode==='m3u'){
+      await loadM3U();
+    }else{
+      // Validate credentials first. Catalog loading is deliberately tolerant:
+      // a failure in movies/series must never invalidate the session.
+      const auth=await api('get_live_categories');
+      if(!Array.isArray(auth)){
+        console.warn('Resposta inesperada na autenticação Xtream:',auth);
+      }
+      await loadXtream();
+    }
+
+    save(LS.cfg,state.cfg);
+    state.page='home';
+    render();
+    toast('Ligação efetuada');
+  }catch(e){
+    console.error('Erro de login:',e);
+    // Keep the entered configuration so a temporary server/catalog error
+    // never destroys the user's session data.
+    save(LS.cfg,state.cfg);
+    const msg=String(e?.message||e||'Erro desconhecido');
+    err.textContent='Não foi possível ligar ao servidor. '+msg;
+  }finally{
+    loading(false);
+  }
+}
 function nav(){const items=[['home','Início'],['live','Canais'],['movies','Filmes'],['series','Séries'],['fav','Favoritos']];return `<nav class="bottom-nav">${items.map(([p,t])=>`<button class="nav-item ${state.page===p?'active':''}" onclick="go('${p}')"><span class="ico">${icon(p)}</span>${t}</button>`).join('')}</nav>`}
 function topbar(){return `<header class="topbar"><img class="top-logo" src="assets/icon.png"><span class="top-title">Everywhere <b>TV</b> Club</span><span class="grow"></span><button class="round-btn" onclick="openSearch()">${icon('search')}</button><button class="round-btn" onclick="go('settings')">${icon('settings')}</button></header>`}
 function shell(body){return `<div class="app"><div class="main">${topbar()}<div class="content">${body}</div>${nav()}</div></div>`}
@@ -178,18 +223,27 @@ function openPlayer(url,title,type,id){
   const v=$('#video');
   const error=$('#playerError');
   error.style.display='none';
-  let failed=false;
-  let fallbackTried=false;
   const isHls=/\.m3u8(?:$|[?#])/i.test(url);
+  let hlsInstance=null;
+  let fallbackTried=false;
+  let closed=false;
 
-  const setSource=(src)=>{
-    v.pause();
-    v.removeAttribute('src');
-    v.load();
-    v.src=src;
-    v.load();
-    v.play().catch(()=>{});
+  const showError=(message)=>{
+    if(!closed){
+      error.textContent=message;
+      error.style.display='block';
+    }
   };
+
+  const savePosition=()=>{
+    if(v.duration&&type!=='live'&&Number.isFinite(v.currentTime)){
+      const item={key:type+':'+id,type,id,name:title,position:v.currentTime,duration:v.duration,updated:Date.now()};
+      state.history=[item,...state.history.filter(x=>x.key!==item.key)].slice(0,30);
+      save(LS.history,state.history);
+    }
+  };
+
+  v.addEventListener('timeupdate',savePosition);
 
   if(h?.position&&type!=='live'){
     v.addEventListener('loadedmetadata',()=>{
@@ -197,35 +251,100 @@ function openPlayer(url,title,type,id){
     },{once:true});
   }
 
+  const nativeHls = v.canPlayType('application/vnd.apple.mpegurl') !== '';
+
+  const startNative=()=>{
+    v.src=url;
+    v.load();
+    v.play().catch(()=>{});
+  };
+
+  const startHlsJs=()=>{
+    if(!window.Hls || !window.Hls.isSupported()) return false;
+
+    hlsInstance=new window.Hls({
+      enableWorker:true,
+      lowLatencyMode:true,
+      backBufferLength:30,
+      maxBufferLength:30,
+      xhrSetup:(xhr)=>{
+        xhr.withCredentials=false;
+      }
+    });
+
+    hlsInstance.on(window.Hls.Events.ERROR,(_event,data)=>{
+      console.error('HLS.js error',data);
+
+      if(data.fatal){
+        if(data.type===window.Hls.ErrorTypes.NETWORK_ERROR){
+          hlsInstance.startLoad();
+        }else if(data.type===window.Hls.ErrorTypes.MEDIA_ERROR){
+          hlsInstance.recoverMediaError();
+        }else{
+          hlsInstance.destroy();
+          hlsInstance=null;
+          showError('O stream HLS não pôde ser interpretado pelo navegador.');
+        }
+      }
+    });
+
+    hlsInstance.on(window.Hls.Events.MANIFEST_PARSED,()=>{
+      error.style.display='none';
+      v.play().catch(()=>{});
+    });
+
+    hlsInstance.loadSource(url);
+    hlsInstance.attachMedia(v);
+    return true;
+  };
+
   v.addEventListener('loadedmetadata',()=>{
     v.play().catch(()=>{});
-  },{once:true});
+  });
 
   v.addEventListener('error',()=>{
     const code=v.error?.code;
     console.error('Erro de reprodução',{src:v.currentSrc||url,code,message:v.error?.message,hls:isHls});
 
-    // Some Xtream servers expose live channels as TS when their .m3u8 endpoint
-    // is unavailable. Try the TS URL once, still through the HTTPS proxy.
+    // On Xtream live streams, try the normal TS endpoint once if HLS fails.
     if(type==='live' && isHls && !fallbackTried && state.mode==='xtream'){
       fallbackTried=true;
       try{
+        if(hlsInstance){hlsInstance.destroy();hlsInstance=null;}
         const c=state.cfg;
         const ts=proxiedStreamUrl(buildXtreamUrl('live',id,'ts'));
-        error.textContent='HLS indisponível. A tentar o stream TS…';
-        error.style.display='block';
-        setSource(ts);
+        showError('HLS indisponível. A tentar o stream TS…');
+        v.src=ts;
+        v.load();
+        v.play().catch(()=>{});
         return;
       }catch{}
     }
 
-    error.textContent=isHls
-      ? 'O servidor devolveu um HLS que o Safari não conseguiu interpretar.'
-      : 'O servidor não forneceu um formato de vídeo compatível com Safari/iOS.';
-    error.style.display='block';
+    showError(isHls
+      ? 'O servidor devolveu um HLS que o navegador não conseguiu interpretar.'
+      : 'O servidor não forneceu um formato de vídeo compatível com Safari/iOS.');
   });
 
-  setSource(url);
+  // Safari/iOS has native HLS support. Chrome/Edge/Firefox need hls.js.
+  if(isHls){
+    if(nativeHls){
+      startNative();
+    }else if(!startHlsJs()){
+      startNative();
+    }
+  }else{
+    startNative();
+  }
+
+  const observer=new MutationObserver(()=>{
+    if(!document.body.contains(v)){
+      closed=true;
+      if(hlsInstance)hlsInstance.destroy();
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.body,{childList:true,subtree:true});
 }
 
 function closePlayer(){$('#player')?.remove();render()}
