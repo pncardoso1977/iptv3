@@ -24,3 +24,7 @@ Abra `http://localhost:8080`.
 
 ## Produção
 Publicar a pasta num domínio HTTPS. No iPhone: Safari → Partilhar → Adicionar ao ecrã principal.
+
+
+## Proxy / HLS
+The app uses `/api/xtream`, `/api/m3u` and `/api/proxy` so an HTTPS Vercel frontend can access HTTP IPTV resources without Mixed Content. HLS playlists are rewritten through the same HTTPS proxy.

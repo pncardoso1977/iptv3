@@ -196,7 +196,7 @@ function playItem(id,title,type,direct){
         // Prefer HLS for Safari/iOS. If the provider does not expose it,
         // fall back to the standard Xtream TS stream.
         const liveItem=(state.data.live||[]).find(x=>String(x.stream_id)===String(id));
-        const liveExt=liveItem?.container_extension || 'm3u8';
+        const liveExt=String(liveItem?.container_extension || 'm3u8').replace(/^\./,'').toLowerCase();
         source=buildXtreamUrl('live',id,liveExt);
       }else{
         const item=(state.data.movies||[]).find(x=>String(x.stream_id)===String(id));
