@@ -9,17 +9,9 @@ export default async function handler(req, res) {
       if (!username || !password || !type || !id) {
         return res.status(400).send('Parâmetros do stream em falta');
       }
-      const allowed = { live: 'live', movie: 'movie', series: 'series' };
-      if (!allowed[type]) return res.status(400).send('Tipo de stream inválido');
-      const ext = extension || (type === 'live' ? 'ts' : 'mp4');
-      target = new URL(
-        `http://everywheretv.fun:8080/${allowed[type]}/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${encodeURIComponent(id)}.${encodeURIComponent(ext)}`
-      );
+      return res.status(400).send('Parâmetro url em falta (este endpoint requer a URL completa do stream)');
     }
 
-    if (target.hostname !== 'everywheretv.fun') {
-      return res.status(403).send('Servidor não autorizado');
-    }
     if (!['http:', 'https:'].includes(target.protocol)) {
       return res.status(400).send('URL inválido');
     }

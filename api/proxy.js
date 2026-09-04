@@ -1,12 +1,42 @@
 import { Readable } from 'node:stream';
 
-const ALLOWED = ['everywheretv.fun','everywheretvclub.xyz','iptv-epg.org','novaera5.club','image.tmdb.org'];
 const PASS_HEADERS = ['content-type','content-length','content-range','accept-ranges','etag','last-modified','cache-control','expires'];
 
+// A app aceita login com QUALQUER servidor Xtream/M3U (introduzido pelo utilizador),
+// por isso o proxy de stream não pode estar limitado a uma lista fixa de domínios —
+// isso bloqueava a reprodução de canais/filmes/séries de qualquer servidor que não
+// estivesse nessa lista. Em vez disso, bloqueamos apenas alvos de risco (rede interna/
+// localhost) para evitar que o proxy seja usado como SSRF. Se quiseres mesmo restringir
+// a lista de servidores permitidos, define a variável de ambiente IPTV_ALLOWED_HOSTS
+// (lista separada por vírgulas) no Vercel.
+function isPrivateOrLocalHost(hostname){
+  const h=String(hostname||'').toLowerCase();
+  if(!h) return true;
+  if(h==='localhost'||h==='0.0.0.0'||h==='::1'||h==='[::1]') return true;
+  if(h.endsWith('.local')) return true;
+  // IPv4 literal checks
+  const m=h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if(m){
+    const [a,b]=m.slice(1,3).map(Number);
+    if(a===127) return true;               // loopback
+    if(a===10) return true;                 // 10.0.0.0/8
+    if(a===169&&b===254) return true;       // link-local
+    if(a===172&&b>=16&&b<=31) return true;  // 172.16.0.0/12
+    if(a===192&&b===168) return true;       // 192.168.0.0/16
+    if(a===0) return true;
+  }
+  // IPv6 unique-local / link-local
+  if(/^f[cd][0-9a-f]{2}:/i.test(h)) return true;
+  if(/^fe[89ab][0-9a-f]:/i.test(h)) return true;
+  return false;
+}
 function allowed(host){
   const h=String(host||'').toLowerCase();
   const configured=(process.env.IPTV_ALLOWED_HOSTS||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);
-  return [...ALLOWED,...configured].some(x=>h===x||h.endsWith('.'+x));
+  // Se o operador do site definir explicitamente IPTV_ALLOWED_HOSTS, só esses domínios passam.
+  if(configured.length) return configured.some(x=>h===x||h.endsWith('.'+x));
+  // Caso contrário, qualquer host público é permitido (login dinâmico do utilizador).
+  return !isPrivateOrLocalHost(h);
 }
 function link(url,origin){ return origin+'/api/proxy?url='+encodeURIComponent(url); }
 function rewrite(text,base,origin){
