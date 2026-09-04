@@ -1,222 +1,42 @@
-const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
+import { Readable } from 'node:stream';
 
-function proxyUrl(url) {
-  return `/api/proxy?url=${encodeURIComponent(url)}`;
+const HOP = new Set(['connection','keep-alive','proxy-authenticate','proxy-authorization','te','trailer','transfer-encoding','upgrade','content-length']);
+const ALLOWED = ['everywheretv.fun','everywheretvclub.xyz','iptv-epg.org','novaera5.club'];
+function allowed(host){const h=host.toLowerCase(); return ALLOWED.some(x=>h===x||h.endsWith('.'+x));}
+function abs(base, value){try{return new URL(value,base).href}catch{return value}}
+function proxyLink(url, origin){return `${origin}/api/proxy?url=${encodeURIComponent(url)}`}
+function rewriteM3U(text, base, origin){
+  text=text.replace(/(URI=)("[^"]*"|'[^']*')/gi,(m,p,q)=>{const v=q.slice(1,-1); return p+JSON.stringify(proxyLink(abs(base,v),origin))});
+  return text.split(/\r?\n/).map(line=>{
+    const t=line.trim();
+    if(!t||t.startsWith('#')) return line;
+    const u=abs(base,t); return proxyLink(u,origin);
+  }).join('\n');
 }
-
-function isTextHls(buffer) {
-  const sample = Buffer.from(buffer).subarray(0, 64).toString("utf8").replace(/^\uFEFF/, "").trimStart();
-  return sample.startsWith("#EXTM3U");
-}
-
-function looksLikeHls(url, contentType) {
-  return /\.m3u8(?:$|[?#])/i.test(url) ||
-    /mpegurl|vnd\.apple\.mpegurl/i.test(contentType || "");
-}
-
-function rewritePlaylist(text, baseUrl) {
-  const rewrite = (value) => {
-    try {
-      const absolute = new URL(value, baseUrl).toString();
-      return proxyUrl(absolute);
-    } catch {
-      return value;
-    }
-  };
-
-  // Rewrite URI="..." attributes used by keys, maps, media playlists, etc.
-  text = text.replace(/URI\s*=\s*("|')([^"']+)(\1)/gi,
-    (_m, q, value) => `URI=${q}${rewrite(value)}${q}`);
-
-  // Rewrite non-comment playlist lines (variants and media segments).
-  return text.split(/\r?\n/).map(line => {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) return line;
-    return rewrite(trimmed);
-  }).join("\n");
-}
-
-function setCors(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Range,Content-Type,Accept");
-  res.setHeader(
-    "Access-Control-Expose-Headers",
-    "Content-Range,Accept-Ranges,Content-Length,Content-Type,ETag,Last-Modified"
-  );
-}
-
-export default async function handler(req, res) {
-  setCors(res);
-
-  if (req.method === "OPTIONS") return res.status(204).end();
-
-  try {
-    const raw = Array.isArray(req.query.url) ? req.query.url[0] : req.query.url;
-
-    if (!raw) return res.status(400).send("URL em falta");
-
-    let target;
-    try {
-      target = new URL(raw);
-    } catch {
-      return res.status(400).send("URL inválida");
-    }
-
-    if (!ALLOWED_PROTOCOLS.has(target.protocol)) {
-      return res.status(400).send("Protocolo inválido");
-    }
-
-    const headers = {
-      "User-Agent": req.headers["user-agent"] || "Mozilla/5.0",
-      "Accept": req.headers.accept || "*/*"
-    };
-
-    if (req.headers.range) headers.Range = req.headers.range;
-
-    // Do not forward the Vercel proxy URL as Referer.
-    if (req.headers.referer && !req.headers.referer.includes("/api/proxy")) {
-      headers.Referer = req.headers.referer;
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 25000);
-
-    let upstream;
-    try {
-      upstream = await fetch(target.toString(), {
-        method: req.method === "HEAD" ? "HEAD" : "GET",
-        headers,
-        redirect: "follow",
-        cache: "no-store",
-        signal: controller.signal
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-
-    const finalUrl = upstream.url || target.toString();
-    const contentType = (upstream.headers.get("content-type") || "").toLowerCase();
-
-    if (!upstream.ok) {
-      const detail = await upstream.text().catch(() => "");
-      console.error("PROXY UPSTREAM", {
-        status: upstream.status,
-        target: target.toString(),
-        finalUrl,
-        contentType,
-        detail: detail.slice(0, 300)
-      });
-
-      return res.status(502).json({
-        error: "Servidor IPTV recusou o recurso",
-        upstreamStatus: upstream.status,
-        contentType,
-        url: finalUrl
-      });
-    }
-
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-
-    if (req.method === "HEAD") {
-      const pass = {
-        "content-type": "Content-Type",
-        "content-length": "Content-Length",
-        "content-range": "Content-Range",
-        "accept-ranges": "Accept-Ranges",
-        "etag": "ETag",
-        "last-modified": "Last-Modified"
-      };
-      for (const [from, to] of Object.entries(pass)) {
-        const value = upstream.headers.get(from);
-        if (value) res.setHeader(to, value);
-      }
-      return res.status(upstream.status).end();
-    }
-
-    /*
-     * HLS playlists must be read as text and rewritten so that every
-     * variant/segment/key remains inside the HTTPS proxy.
-     *
-     * Some IPTV servers incorrectly label TS data as .m3u8. Therefore
-     * we inspect the first bytes instead of blindly treating every
-     * .m3u8 URL as text.
-     */
-    if (looksLikeHls(finalUrl, contentType)) {
-      const buffer = Buffer.from(await upstream.arrayBuffer());
-
-      if (isTextHls(buffer)) {
-        const playlist = rewritePlaylist(
-          buffer.toString("utf8"),
-          finalUrl
-        );
-
-        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-        return res.status(200).send(playlist);
-      }
-
-      // Not an actual HLS playlist: pass the binary response through.
-      const binaryType =
-        contentType.includes("mpegurl") ? "video/mp2t" :
-        contentType || "video/mp2t";
-
-      res.setHeader("Content-Type", binaryType);
-      const contentRange = upstream.headers.get("content-range");
-      const acceptRanges = upstream.headers.get("accept-ranges");
-      if (contentRange) res.setHeader("Content-Range", contentRange);
-      if (acceptRanges) res.setHeader("Accept-Ranges", acceptRanges);
-
-      return res.status(200).send(buffer);
-    }
-
-    const pass = {
-      "content-type": "Content-Type",
-      "content-range": "Content-Range",
-      "accept-ranges": "Accept-Ranges",
-      "etag": "ETag",
-      "last-modified": "Last-Modified"
-    };
-
-    for (const [from, to] of Object.entries(pass)) {
-      const value = upstream.headers.get(from);
-      if (value) res.setHeader(to, value);
-    }
-
-    if (upstream.body) {
-      const reader = upstream.body.getReader();
-
-      res.on("close", () => {
-        try { reader.cancel(); } catch {}
-      });
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (!res.write(Buffer.from(value))) {
-            await new Promise(resolve => res.once("drain", resolve));
-          }
-        }
-        return res.end();
-      } catch (streamError) {
-        console.error("PROXY STREAM ERROR", streamError);
-        if (!res.headersSent) return res.status(502).send("Erro durante o streaming");
-        return res.end();
-      }
-    }
-
-    return res.status(200).send(Buffer.from(await upstream.arrayBuffer()));
-
-  } catch (error) {
-    console.error("PROXY ERROR", error);
-
-    const detail = error?.name === "AbortError"
-      ? "Timeout ao contactar o servidor IPTV"
-      : (error?.cause?.message || error?.message || "Erro de rede");
-
-    return res.status(502).json({
-      error: "Não foi possível obter o recurso IPTV",
-      detail
-    });
-  }
+export default async function handler(req,res){
+  res.setHeader('Access-Control-Allow-Origin','*');
+  res.setHeader('Access-Control-Allow-Headers','Range,Content-Type,Accept,Origin');
+  res.setHeader('Access-Control-Expose-Headers','Content-Length,Content-Range,Accept-Ranges,Content-Type');
+  if(req.method==='OPTIONS') return res.status(204).end();
+  const raw=req.query?.url;
+  if(!raw) return res.status(400).json({error:'URL em falta'});
+  let target; try{target=new URL(raw)}catch{return res.status(400).json({error:'URL inválida'})}
+  if(!['http:','https:'].includes(target.protocol)||!allowed(target.hostname)) return res.status(403).json({error:'Host não autorizado',host:target.hostname});
+  const headers={'User-Agent':'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1','Accept':'*/*'};
+  if(req.headers.range) headers.Range=req.headers.range;
+  if(req.headers['accept-language']) headers['Accept-Language']=req.headers['accept-language'];
+  try{
+    const upstream=await fetch(target,{method:req.method==='HEAD'?'HEAD':'GET',headers,redirect:'follow',signal:AbortSignal.timeout(30000)});
+    const ct=(upstream.headers.get('content-type')||'').toLowerCase();
+    if(!upstream.ok){return res.status(502).json({error:'Servidor IPTV respondeu com erro',status:upstream.status,url:target.href,contentType:ct});}
+    if(req.method==='HEAD'){res.status(upstream.status); if(ct)res.setHeader('Content-Type',ct); return res.end();}
+    const finalUrl=upstream.url||target.href;
+    const isM3U=ct.includes('mpegurl')||ct.includes('vnd.apple.mpegurl')||/\.m3u8(?:$|\?)/i.test(finalUrl);
+    if(isM3U){const text=await upstream.text(); if(!text.trim().startsWith('#EXTM3U')) return res.status(502).json({error:'O servidor indicou HLS mas devolveu conteúdo inválido',contentType:ct}); const body=rewriteM3U(text,finalUrl,`${req.headers['x-forwarded-proto']||'https'}://${req.headers.host}`);res.status(200);res.setHeader('Content-Type','application/vnd.apple.mpegurl');res.setHeader('Cache-Control','no-store');return res.send(body);}
+    const pass=['content-type','content-range','accept-ranges','etag','last-modified','cache-control'];
+    for(const h of pass){const v=upstream.headers.get(h);if(v)res.setHeader(h,v)}
+    res.status(upstream.status);
+    if(upstream.body) return Readable.fromWeb(upstream.body).pipe(res);
+    return res.end();
+  }catch(e){console.error('proxy error',e);return res.status(502).json({error:'Falha ao contactar o servidor IPTV',detail:e?.message||String(e),host:target.hostname});}
 }
