@@ -226,6 +226,7 @@ function openPlayer(url,title,type,id){
   const error=$('#playerError');
   error.style.display='none';
   const isHls=/\.m3u8(?:$|[?#])/i.test(url);
+  const sourceUrl=url;
   let hlsInstance=null;
   let fallbackTried=false;
   let closed=false;
