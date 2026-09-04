@@ -61,9 +61,48 @@ function catalogCard(x,type){const id=x.stream_id||x.series_id||x.id;const key=t
 function favorites(){const all=[];for(const t of ['live','movies','series'])for(const x of state.data[t]||[]){const id=x.stream_id||x.series_id||x.id;if(state.favorites.includes(t+':'+id))all.push({...x,_type:t})}return shell(`<div class="content-head"><h1>Favoritos</h1></div><div class="catalog-grid">${all.length?all.map(x=>catalogCard(x,x._type)).join(''):'<div class="empty">Ainda não tem favoritos.</div>'}</div>`)}
 async function seriesDetail(id){loading(true);try{const s=state.mode==='xtream'?await api('get_series_info',{series_id:id}):null;state.series=s;renderSeries(id,s)}catch(e){toast('Não foi possível carregar a série.')}finally{loading(false)}}
 function renderSeries(id,s){if(!s)return;const info=s.info||{};const poster=info.cover||info.movie_image||'';let seasons=Object.entries(s.episodes||{});const body=`<div class="detail"><div class="detail-hero"><img class="detail-backdrop" src="${esc(poster)}"><div class="content-head" style="position:absolute;top:12px;left:16px;z-index:3"><button class="back" onclick="go('series')">${icon('back')}</button></div></div><div class="detail-info"><div class="detail-poster">${img(poster)}</div><div class="detail-title"><h1>${esc(info.name||'Série')}</h1><div class="muted">${esc(info.genre||'')} ${info.releaseDate?'· '+esc(info.releaseDate):''}</div></div></div><div class="action-row"><button class="action" onclick="toggleFav('series:${esc(id)}')">${state.favorites.includes('series:'+id)?'♥ Favorito':'♡ Favorito'}</button></div><p class="muted">${esc(info.plot||'Sem descrição disponível.')}</p>${seasons.map(([season,eps])=>`<section class="section"><div class="section-head"><h2>Temporada ${esc(season)}</h2></div>${(eps||[]).map(e=>`<button class="episode" onclick="playEpisode('${esc(e.id)}','${esc(e.title||('Episódio '+e.episode_num))}','${esc(e.container_extension||'mp4')}')"><div class="episode-thumb">${img(e.info?.movie_image||e.movie_image)}${!e.info?.movie_image&&!e.movie_image?icon('play'):''}</div><div><h3>${esc(e.episode_num||'')} · ${esc(e.title||'Episódio')}</h3><p>${esc(e.info?.plot||'')}</p></div></button>`).join('')}</section>`).join('')}</div>`;document.querySelector('.content').innerHTML=body}
-function playItem(id,title,type,direct){let url=direct;if(!url){const c=state.cfg;if(!c)return;const base=c.server.replace(/\/$/,'');const item=(state.data[type]||[]).find(x=>String(x.stream_id||x.id)===String(id));const ext=(item?.container_extension|| (type==='live'?'ts':'mp4')).toLowerCase();url=`${base}/${type==='live'?'live':'movie'}/${encodeURIComponent(c.username)}/${encodeURIComponent(c.password)}/${id}.${ext}`}openPlayer(proxyUrl(url),title,type,id)}
+function playItem(id,title,type,direct){
+  const c=state.cfg;
+  if(!c)return;
+  let url=direct;
+  const item=(state.data[type]||[]).find(x=>String(x.stream_id||x.id)===String(id));
+  if(type==='live'){
+    if(url){
+      try{const u=new URL(url); if(/\.(ts|mpeg|mpg)(?:$|\?)/i.test(u.pathname)) u.pathname=u.pathname.replace(/\.(ts|mpeg|mpg)$/i,'.m3u8'); url=u.href;}catch{}
+    }else{
+      const base=c.server.replace(/\/$/,'');
+      url=`${base}/live/${encodeURIComponent(c.username)}/${encodeURIComponent(c.password)}/${id}.m3u8`;
+    }
+  }else if(!url){
+    const base=c.server.replace(/\/$/,'');
+    const ext=(item?.container_extension||'mp4').toLowerCase();
+    url=`${base}/${type==='movies'?'movie':'series'}/${encodeURIComponent(c.username)}/${encodeURIComponent(c.password)}/${id}.${ext}`;
+  }
+  openPlayer(proxyUrl(url),title,type,id);
+}
 function playEpisode(id,title,ext){const c=state.cfg;if(!c)return;const url=`${c.server.replace(/\/$/,'')}/series/${encodeURIComponent(c.username)}/${encodeURIComponent(c.password)}/${id}.${ext||'mp4'}`;openPlayer(proxyUrl(url),title,'series',id)}
-function openPlayer(url,title,type,id){const h=state.history.find(x=>x.key===type+':'+id);document.body.insertAdjacentHTML('beforeend',`<div class="player" id="player"><div class="player-head"><div class="player-name">${esc(title)}</div><button class="player-close" onclick="closePlayer()">×</button></div><video id="video" controls autoplay playsinline preload="metadata" src="${esc(url)}"></video><div id="playerError" class="player-error">Este stream não pode ser reproduzido pelo Safari. HLS (.m3u8) é o formato com melhor compatibilidade no iOS.</div></div>`);const v=$('#video');if(h?.position&&type!=='live')v.currentTime=h.position;v.onloadedmetadata=()=>{if(h?.position&&h.position<v.duration-5)v.currentTime=h.position;v.play().catch(()=>{})};v.ontimeupdate=()=>{if(v.duration&&type!=='live'){const item={key:type+':'+id,type,id,name:title,position:v.currentTime,duration:v.duration,updated:Date.now()};state.history=[item,...state.history.filter(x=>x.key!==item.key)].slice(0,30);save(LS.history,state.history)}};v.onerror=()=>$('#playerError').style.display='block'}
+function openPlayer(url,title,type,id){
+  const h=state.history.find(x=>x.key===type+':'+id);
+  const isHls=/\.m3u8(?:$|\?)/i.test(url);
+  document.body.insertAdjacentHTML('beforeend',`<div class="player" id="player"><div class="player-head"><div class="player-name">${esc(title)}</div><button class="player-close" onclick="closePlayer()">×</button></div><video id="video" controls autoplay playsinline preload="metadata" crossorigin="anonymous"></video><div id="playerError" class="player-error"></div></div>`);
+  const v=$('#video'), err=$('#playerError');
+  err.textContent=isHls?'A preparar o canal…':'A preparar o vídeo…';
+  if(h?.position&&type!=='live')v.currentTime=h.position;
+  const fail=()=>{err.textContent='Não foi possível reproduzir este stream. O servidor poderá não disponibilizar HLS compatível com Safari.';err.style.display='block';};
+  v.onerror=fail;
+  if(isHls && v.canPlayType('application/vnd.apple.mpegurl')){
+    v.src=url;
+    v.addEventListener('loadedmetadata',()=>{if(h?.position&&h.position<v.duration-5)v.currentTime=h.position;v.play().catch(()=>{})},{once:true});
+  }else if(isHls){
+    // Native HLS is preferred. hls.js is deliberately not required: the app remains self-contained.
+    v.src=url;
+    v.addEventListener('loadedmetadata',()=>v.play().catch(()=>{}),{once:true});
+  }else{
+    v.src=url;
+    v.addEventListener('loadedmetadata',()=>{if(h?.position&&h.position<v.duration-5)v.currentTime=h.position;v.play().catch(()=>{})},{once:true});
+  }
+  v.ontimeupdate=()=>{if(v.duration&&type!=='live'){const item={key:type+':'+id,type,id,name:title,position:v.currentTime,duration:v.duration,updated:Date.now()};state.history=[item,...state.history.filter(x=>x.key!==item.key)].slice(0,30);save(LS.history,state.history)}};
+}
 function closePlayer(){$('#player')?.remove();render()}
 function toggleFav(k){state.favorites=state.favorites.includes(k)?state.favorites.filter(x=>x!==k):[...state.favorites,k];save(LS.fav,state.favorites);render()}
 function settings(){const c=state.cfg||{};return shell(`<div class="content-head"><h1>Definições</h1></div><div class="setting"><h3>Ligação</h3><div class="value">${esc(state.mode==='m3u'?c.url:c.server||'')}</div></div><div class="setting"><h3>Utilizador</h3><div class="value">${esc(c.username||'Playlist M3U')}</div></div><div class="setting"><h3>Conteúdo em cache</h3><div class="value">${state.cache.saved?new Date(state.cache.saved).toLocaleString('pt-PT'):'—'}</div></div><button class="action" style="width:100%;margin:10px 0" onclick="refresh()">${icon('refresh')} Atualizar conteúdo</button><button class="danger" onclick="logout()">${icon('logout')} Terminar sessão</button>`)}

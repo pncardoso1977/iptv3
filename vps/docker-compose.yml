@@ -1,0 +1,15 @@
+services:
+  stream-relay:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      HLS_ROOT: /var/www/hls
+      STREAM_TTL: 180
+      ALLOWED_HOSTS: everywheretv.fun,everywheretvclub.xyz
+    volumes:
+      - hls:/var/www/hls
+volumes:
+  hls:

@@ -1,26 +1,14 @@
-# Everywhere TV Club — Web/PWA iOS v2
+# Everywhere TV Web v2
 
-Reconstrução completa do protótipo a partir do APK fornecido, mantendo a identidade visual do Everywhere TV Club e a estrutura observável do projeto Android (Splash/Login, Home, Channels, Movies, Series, Player, Settings, XtreamRepository e M3UParser).
+PWA IPTV para Vercel com login Xtream Codes, catálogo Live/Filmes/Séries e reprodução sem VPS.
 
-## Incluído
-- Home com banner original, acesso rápido e "Continuar a ver".
-- Canais, Filmes e Séries com pesquisa, categorias e grelha responsiva.
-- Favoritos persistentes.
-- Detalhes de séries, temporadas e episódios.
-- Histórico/progresso de reprodução local.
-- Player HTML5 fullscreen/playsinline adequado ao Safari/iOS.
-- Login Xtream Codes e Playlist M3U.
-- Cache local para abrir a interface rapidamente.
-- PWA / Add to Home Screen / safe-area do iPhone.
-- Layout desktop com navegação lateral e layout iPhone com barra inferior.
+## Reprodução
 
-## Limitação técnica do iOS
-O browser não consegue ultrapassar CORS, mixed-content ou restrições de codecs. Em produção, publicar por HTTPS e, para servidores sem CORS, usar um proxy HTTPS controlado pelo operador. Para iOS, HLS (.m3u8) é o formato preferencial.
+- Live: a aplicação solicita HLS (`.m3u8`) ao servidor Xtream e passa-o pelo `/api/proxy`.
+- iOS/Safari: usa HLS nativo do Safari.
+- MP4: usa `<video>` com suporte a Range através do proxy.
+- Não é necessário VPS ou FFmpeg externo.
 
-## Arranque local
-`python3 -m http.server 8080 --directory EverywhereTVWeb_v2`
+## Importante
 
-Abra `http://localhost:8080`.
-
-## Produção
-Publicar a pasta num domínio HTTPS. No iPhone: Safari → Partilhar → Adicionar ao ecrã principal.
+O servidor Xtream tem de disponibilizar HLS para os canais Live. A playlist `get.php` com `output=mpegts` descreve streams MPEG-TS (`.ts`); para browsers Apple, a app tenta o endpoint HLS equivalente (`.m3u8`). Se o fornecedor não disponibilizar HLS, uma aplicação web sem transcoder externo não consegue transformar MPEG-TS em HLS de forma fiável apenas com HTML5.
