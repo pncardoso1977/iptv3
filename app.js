@@ -1,7 +1,7 @@
 'use strict';
 const $=s=>document.querySelector(s), esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const LS={cfg:'etv_cfg_v2',fav:'etv_fav_v2',history:'etv_history_v2',cache:'etv_cache_v2'};
-const state={page:'home',mode:'xtream',cfg:load(LS.cfg),favorites:load(LS.fav)||[],history:load(LS.history)||[],cache:load(LS.cache)||{},data:{live:[],movies:[],series:[],liveCats:[],movieCats:[],seriesCats:[]},q:'',cat:'all',series:null};
+const state={page:'home',mode:'xtream',cfg:load(LS.cfg),favorites:load(LS.fav)||[],history:load(LS.history)||[],cache:{},data:{live:[],movies:[],series:[],liveCats:[],movieCats:[],seriesCats:[]},q:'',cat:'all',series:null};
 function load(k){try{return JSON.parse(localStorage.getItem(k)||'null')}catch{return null}} function save(k,v){localStorage.setItem(k,JSON.stringify(v))}
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');clearTimeout(window._tt);window._tt=setTimeout(()=>e.classList.remove('show'),2200)}
 function loading(on){if(on&&!$('#loading'))document.body.insertAdjacentHTML('beforeend','<div id="loading" class="loading"><div class="spinner"></div></div>');if(!on)$('#loading')?.remove()}
@@ -78,8 +78,8 @@ async function loadXtream(){
   }
 
   state.data=d;
-  state.cache={saved:Date.now(),data:d};
-  save(LS.cache,state.cache);
+  state.cache={saved:Date.now()};
+  localStorage.removeItem(LS.cache);
   render();
 }
 function normalizeM3U(text){const out=[];let meta={};for(const raw of text.split(/\r?\n/)){const line=raw.trim();if(line.startsWith('#EXTINF:')){const attrs={};const re=/([\w-]+)="([^"]*)"/g;let m;while((m=re.exec(line)))attrs[m[1]]=m[2];meta={name:(line.split(',').slice(1).join(',')||'Sem nome').trim(),logo:attrs['tvg-logo']||'',group:attrs['group-title']||'Outros'};}else if(line&&!line.startsWith('#')&&meta.name){out.push({name:meta.name,stream_icon:meta.logo,group:meta.group,url:line});meta={}}}return out}
@@ -104,8 +104,8 @@ async function loadM3U(){
     seriesCats:[]
   };
 
-  state.cache={saved:Date.now(),data:state.data};
-  save(LS.cache,state.cache);
+  state.cache={saved:Date.now()};
+  localStorage.removeItem(LS.cache);
 }
 async function login(){
   const err=$('#loginErr');
@@ -357,8 +357,18 @@ function searchPage(){return shell(`<div class="content-head"><h1>Pesquisar</h1>
 function renderSearchResults(){const q=state.q.toLowerCase();const arr=[];for(const t of ['live','movies','series'])for(const x of state.data[t]||[])if(String(x.name).toLowerCase().includes(q))arr.push({...x,_type:t});const e=$('#searchResults');if(e)e.innerHTML=`<div class="catalog-grid">${q?(arr.length?arr.slice(0,80).map(x=>catalogCard(x,x._type)).join(''):'<div class="empty">Nenhum resultado.</div>'):'<div class="empty">Comece a escrever para pesquisar.</div>'}</div>`}
 function go(p){state.page=p;state.q='';state.cat='all';state.series=null;render()}
 function render(){if(!state.cfg){$('#app').innerHTML=loginView();return}if(state.series){renderSeries(state.series.info?.id,state.series);return}if(state.page==='home')$('#app').innerHTML=home();else if(['live','movies','series'].includes(state.page))$('#app').innerHTML=catalog(state.page);else if(state.page==='fav')$('#app').innerHTML=favorites();else if(state.page==='settings')$('#app').innerHTML=settings();else if(state.page==='search'){$('#app').innerHTML=searchPage();renderSearchResults()}}
-// Restore cached content so the shell opens instantly while a refresh is available.
+// O catálogo IPTV pode ser demasiado grande para o localStorage.
+// A configuração/login, favoritos e histórico continuam persistentes;
+// o catálogo é mantido apenas em memória.
 if(state.cfg?.mode)state.mode=state.cfg.mode;
-if(state.cfg&&state.cache?.data){state.data=state.cache.data;setTimeout(()=>{(state.mode==='xtream'?loadXtream():loadM3U()).catch(()=>{})},100)}
+try{localStorage.removeItem(LS.cache)}catch{}
 render();
-if(state.cfg&&!state.cache?.data){setTimeout(()=>{loading(true);(state.mode==='m3u'?loadM3U():loadXtream()).then(render).catch(()=>toast('Não foi possível carregar o conteúdo.')).finally(()=>loading(false))},60)}
+if(state.cfg){
+  setTimeout(()=>{
+    loading(true);
+    (state.mode==='m3u'?loadM3U():loadXtream())
+      .then(render)
+      .catch(e=>{console.error('Erro ao carregar conteúdo:',e);toast('Não foi possível carregar o conteúdo.')})
+      .finally(()=>loading(false));
+  },60);
+}
