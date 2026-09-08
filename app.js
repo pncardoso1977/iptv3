@@ -115,7 +115,7 @@ function openPlayer(rawUrl,title,type,id,item){
   closePlayer(false);
   const h=state.history.find(x=>x.key===type+':'+id);
   const session={destroyed:false,mpegts:null,hls:null,retries:0};window.__etvPlayerSession=session;
-  document.body.insertAdjacentHTML('beforeend',`<div class="player" id="player"><div class="player-head"><div class="player-name">${esc(title)}</div><button class="player-close" onclick="closePlayer()">×</button></div><video id="video" controls autoplay playsinline preload="metadata" crossorigin="anonymous"></video><div id="playerError" class="player-error"></div></div>`);
+  document.body.insertAdjacentHTML('beforeend',`<div class="player" id="player"><div class="player-head"><div class="player-name">${esc(title)}</div><button class="player-close" onclick="closePlayer()">×</button></div><video id="video" controls autoplay playsinline preload="metadata"></video><div id="playerError" class="player-error"></div></div>`);
   const v=$('#video'),err=$('#playerError');
   let kind='mp4';
   const fail=message=>{if(session.destroyed)return;err.textContent=message;err.style.display='block';console.error('Erro de reprodução',{kind,title,type});};
