@@ -37,7 +37,20 @@ function api(action,extra={}){
   });
 }
 
-async function loadXtream(){const d=state.data;const jobs=[['liveCats','get_live_categories'],['movieCats','get_vod_categories'],['seriesCats','get_series_categories'],['live','get_live_streams'],['movies','get_vod_streams'],['series','get_series']];for(const [k,a] of jobs){d[k]=await api(a);render();}state.cache={saved:Date.now(),data:null}; try{localStorage.removeItem(LS.cache)}catch{}}
+async function loadXtream(){
+  const d=state.data;
+  const jobs=[['liveCats','get_live_categories'],['movieCats','get_vod_categories'],['seriesCats','get_series_categories'],['live','get_live_streams'],['movies','get_vod_streams'],['series','get_series']];
+  // Pedidos em paralelo, cada um com o seu próprio erro: em sequência, uma categoria lenta
+  // ou falhada (comum em ligações móveis fracas) bloqueava tudo o que vinha a seguir na
+  // lista — é por isto que Filmes/Séries apareciam vazios mesmo com o Live TV a funcionar.
+  const results=await Promise.allSettled(jobs.map(([k,a])=>api(a).then(r=>{d[k]=r;render()})));
+  const failed=results.filter(r=>r.status==='rejected');
+  if(failed.length){
+    console.error('loadXtream falhas',failed.map(r=>r.reason));
+    toast(failed.length===jobs.length?'Não foi possível carregar o conteúdo. Verifique a ligação.':'Alguns conteúdos não carregaram. Toque em Atualizar nas Definições.');
+  }
+  state.cache={saved:Date.now(),data:null}; try{localStorage.removeItem(LS.cache)}catch{}
+}
 function normalizeM3U(text){const out=[];let meta={};for(const raw of text.split(/\r?\n/)){const line=raw.trim();if(line.startsWith('#EXTINF:')){const attrs={};const re=/([\w-]+)="([^"]*)"/g;let m;while((m=re.exec(line)))attrs[m[1]]=m[2];meta={name:(line.split(',').slice(1).join(',')||'Sem nome').trim(),logo:attrs['tvg-logo']||'',group:attrs['group-title']||'Outros'};}else if(line&&!line.startsWith('#')&&meta.name){out.push({name:meta.name,stream_icon:meta.logo,group:meta.group,url:line});meta={}}}return out}
 async function loadM3U(){const r=await fetch(proxyUrl(state.cfg.url),{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);const text=await r.text();const live=normalizeM3U(text);state.data={live,movies:[],series:[],liveCats:[...new Set(live.map(x=>x.group))].map((x,i)=>({category_id:i,category_name:x})),movieCats:[],seriesCats:[]};state.cache={saved:Date.now(),data:null}; try{localStorage.removeItem(LS.cache)}catch{}}
 async function login(){const err=$('#loginErr');const server=$('#server')?.value.trim(),user=$('#user')?.value.trim(),pass=$('#pass')?.value;state.mode=$('.login-tabs .on')?.dataset.mode||'xtream';err.textContent='';if(state.mode==='m3u'){const url=$('#m3uurl')?.value.trim();if(!url)return err.textContent='Introduza o URL da playlist M3U.';state.cfg={url,mode:'m3u'};}else{if(!server||!user||!pass)return err.textContent='Preencha servidor, utilizador e password.';state.cfg={server,username:user,password:pass,mode:'xtream'};}loading(true);try{if(state.mode==='m3u')await loadM3U();else await loadXtream();save(LS.cfg,state.cfg);state.page='home';render();toast('Ligação efetuada');}catch(e){console.error('Login:',e);err.textContent='Não foi possível ligar. '+(e?.message||'Verifique o servidor e as credenciais.');}finally{loading(false)}}
