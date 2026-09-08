@@ -74,7 +74,25 @@ function playerHttpError(status){return ({403:'O servidor IPTV recusou o acesso 
 // mas já respondem com Access-Control-Allow-Origin:* para o browser do próprio utilizador.
 // Por isso tentamos sempre primeiro o URL direto (IP residencial do visitante) e só usamos
 // o proxy /api/proxy como fallback quando o servidor não expõe CORS.
-async function silentProbe(url){try{let r=await fetch(url,{method:'HEAD',cache:'no-store'});if(!r.ok)r=await fetch(url,{method:'GET',headers:{Range:'bytes=0-1'},cache:'no-store'});if(!r.ok)return{ok:false,status:r.status};return{ok:true,status:r.status,contentType:(r.headers.get('content-type')||'').toLowerCase()}}catch(e){return{ok:false,error:e}}}
+async function silentProbe(url){
+  let sameOrigin=false;try{sameOrigin=new URL(url,window.location.href).origin===window.location.origin}catch{}
+  try{
+    if(sameOrigin){
+      let r=await fetch(url,{method:'HEAD',cache:'no-store'});
+      if(!r.ok)r=await fetch(url,{method:'GET',headers:{Range:'bytes=0-1'},cache:'no-store'});
+      if(!r.ok)return{ok:false,status:r.status};
+      return{ok:true,status:r.status,contentType:(r.headers.get('content-type')||'').toLowerCase()};
+    }
+    // Pedido direto ao servidor IPTV (fora do nosso domínio): evitamos cabeçalhos
+    // personalizados como Range, que obrigam a um preflight CORS que muitos edges/CDNs
+    // de streaming não respondem corretamente, bloqueando o pedido real a seguir.
+    const r=await fetch(url,{method:'GET',cache:'no-store'});
+    const contentType=(r.headers.get('content-type')||'').toLowerCase();
+    try{r.body?.cancel()}catch{}
+    if(!r.ok)return{ok:false,status:r.status};
+    return{ok:true,status:r.status,contentType};
+  }catch(e){return{ok:false,error:e}}
+}
 async function resolvePlayable(rawUrl,proxiedUrl){const direct=await silentProbe(rawUrl);if(direct.ok)return{url:rawUrl,contentType:direct.contentType};const proxied=await silentProbe(proxiedUrl);if(proxied.ok)return{url:proxiedUrl,contentType:proxied.contentType};return{status:proxied.status}}
 function openPlayer(rawUrl,title,type,id,item){
   closePlayer(false);
