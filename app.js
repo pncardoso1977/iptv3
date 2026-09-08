@@ -64,22 +64,33 @@ function playItem(id,title,type,direct){
     const ext=(item?.container_extension||'mp4').toLowerCase();
     url=`${base}/${type==='movies'?'movie':'series'}/${encodeURIComponent(c.username)}/${encodeURIComponent(c.password)}/${id}.${ext}`;
   }
-  openPlayer(mediaUrl(url),title,type,id,streamKind(url,type,item));
+  openPlayer(url,title,type,id,item);
 }
-function playEpisode(id,title,ext){const c=state.cfg;if(!c)return;const url=`${c.server.replace(/\/$/,'')}/series/${encodeURIComponent(c.username)}/${encodeURIComponent(c.password)}/${id}.${ext||'mp4'}`;openPlayer(mediaUrl(url),title,'series',id,streamKind(url,'series',{container_extension:ext}))}
+function playEpisode(id,title,ext){const c=state.cfg;if(!c)return;const url=`${c.server.replace(/\/$/,'')}/series/${encodeURIComponent(c.username)}/${encodeURIComponent(c.password)}/${id}.${ext||'mp4'}`;openPlayer(url,title,'series',id,{container_extension:ext})}
 function mediaUrl(url){if(!url)return '';try{const u=new URL(url,window.location.href);if(u.origin===window.location.origin&&u.pathname.startsWith('/api/'))return u.href;return '/api/proxy?url='+encodeURIComponent(u.href)}catch{return url}}
-function streamKind(url,type,item){const ext=String(item?.container_extension||'').toLowerCase();if(/\.m3u8(?:$|[?#])/i.test(url)||ext==='m3u8')return'hls';if(type==='live'&&(ext==='ts'||ext==='mpegts'||/\.(ts|mpeg|mpg)(?:$|[?#])/i.test(url)))return'mpegts';return'mp4'}
+function streamKind(ct,url,type,item){const ext=String(item?.container_extension||'').toLowerCase();ct=String(ct||'').toLowerCase();if(ct.includes('mpegurl')||/\.m3u8(?:$|[?#])/i.test(url)||ext==='m3u8')return'hls';if(ct.includes('mp2t')||ext==='ts'||ext==='mpegts'||/\.(ts|mpeg|mpg)(?:$|[?#])/i.test(url))return'mpegts';if(ct.startsWith('video/mp4')||ext==='mp4')return'mp4';return type==='live'?'mpegts':'mp4'}
 function playerHttpError(status){return ({403:'O servidor IPTV recusou o acesso (HTTP 403).',404:'O stream já não existe no servidor (HTTP 404).',502:'Não foi possível contactar o servidor IPTV (HTTP 502).'})[status]||`O servidor respondeu HTTP ${status}.`}
-async function probeStream(url,session,fail){try{let r=await fetch(url,{method:'HEAD',cache:'no-store'});if(!r.ok){r=await fetch(url,{method:'GET',headers:{Range:'bytes=0-1'},cache:'no-store'});}if(!r.ok){let detail='';try{detail=await r.text()}catch{};console.error('probe stream',r.status,detail.slice(0,200));fail(playerHttpError(r.status));return false}return !session.destroyed}catch(e){console.error('probe stream error',e);fail('Não foi possível validar a ligação ao stream. Verifique a rede ou o proxy.');return false}}
-function openPlayer(url,title,type,id,kind){
+// Muitos painéis Xtream/XUI bloqueiam pedidos vindos de IPs de datacenter (o nosso proxy Vercel),
+// mas já respondem com Access-Control-Allow-Origin:* para o browser do próprio utilizador.
+// Por isso tentamos sempre primeiro o URL direto (IP residencial do visitante) e só usamos
+// o proxy /api/proxy como fallback quando o servidor não expõe CORS.
+async function silentProbe(url){try{let r=await fetch(url,{method:'HEAD',cache:'no-store'});if(!r.ok)r=await fetch(url,{method:'GET',headers:{Range:'bytes=0-1'},cache:'no-store'});if(!r.ok)return{ok:false,status:r.status};return{ok:true,status:r.status,contentType:(r.headers.get('content-type')||'').toLowerCase()}}catch(e){return{ok:false,error:e}}}
+async function resolvePlayable(rawUrl,proxiedUrl){const direct=await silentProbe(rawUrl);if(direct.ok)return{url:rawUrl,contentType:direct.contentType};const proxied=await silentProbe(proxiedUrl);if(proxied.ok)return{url:proxiedUrl,contentType:proxied.contentType};return{status:proxied.status}}
+function openPlayer(rawUrl,title,type,id,item){
   closePlayer(false);
   const h=state.history.find(x=>x.key===type+':'+id);
   const session={destroyed:false,mpegts:null,hls:null,retries:0};window.__etvPlayerSession=session;
   document.body.insertAdjacentHTML('beforeend',`<div class="player" id="player"><div class="player-head"><div class="player-name">${esc(title)}</div><button class="player-close" onclick="closePlayer()">×</button></div><video id="video" controls autoplay playsinline preload="metadata" crossorigin="anonymous"></video><div id="playerError" class="player-error"></div></div>`);
   const v=$('#video'),err=$('#playerError');
+  let kind='mp4';
   const fail=message=>{if(session.destroyed)return;err.textContent=message;err.style.display='block';console.error('Erro de reprodução',{kind,title,type});};
   const start=async()=>{
-    if(!await probeStream(url,session,fail)||session.destroyed)return;
+    err.textContent='A validar a ligação…';
+    const resolved=await resolvePlayable(rawUrl,mediaUrl(rawUrl));
+    if(session.destroyed)return;
+    if(!resolved.url){fail(resolved.status?playerHttpError(resolved.status):'Não foi possível validar a ligação ao stream. Verifique a rede ou o proxy.');return}
+    const url=resolved.url;
+    kind=streamKind(resolved.contentType,url,type,item);
     err.textContent=kind==='mpegts'?'A preparar o canal MPEG-TS…':kind==='hls'?'A preparar o canal HLS…':'A preparar o vídeo…';
     v.onerror=()=>fail(kind==='mp4'?'O vídeo não é compatível ou a resposta Range do servidor é inválida.':`O leitor não conseguiu descodificar este ${kind==='hls'?'HLS':'MPEG-TS'}. Verifique o codec e a resposta do servidor.`);
     if(kind==='mpegts'){
