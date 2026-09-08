@@ -112,8 +112,16 @@ function openPlayer(rawUrl,title,type,id,item){
     err.textContent=kind==='mpegts'?'A preparar o canal MPEG-TS…':kind==='hls'?'A preparar o canal HLS…':'A preparar o vídeo…';
     v.onerror=()=>fail(kind==='mp4'?'O vídeo não é compatível ou a resposta Range do servidor é inválida.':`O leitor não conseguiu descodificar este ${kind==='hls'?'HLS':'MPEG-TS'}. Verifique o codec e a resposta do servidor.`);
     if(kind==='mpegts'){
-      // Muitos servidores Xtream disponibilizam o mesmo canal em TS e HLS.
-      // No Safari tentamos primeiro a variante .m3u8; só usamos MPEG-TS/MSE como fallback.
+      // Preferimos sempre MSE (mpegts.js) quando o dispositivo o suporta — funciona em
+      // Chrome, Firefox, Edge/WebView2 e Safari recente (Managed Media Source), e não
+      // depende do servidor ter uma variante .m3u8 do mesmo canal (muitos não têm,
+      // sobretudo canais de playlists M3U sem extensão no URL). Só recorremos ao truque
+      // "trocar para .m3u8" em dispositivos sem qualquer suporte de MSE para live (Safari antigo/iOS).
+      let features;try{features=window.mpegts?.getFeatureList?.()}catch{features={}}
+      if(window.mpegts?.createPlayer&&features?.mseLivePlayback){
+        const reconnect=()=>{if(session.destroyed||session.retries++>=2)return fail('O canal MPEG-TS interrompeu-se após várias tentativas de ligação.');setTimeout(()=>{if(!session.destroyed){try{session.mpegts.unload();session.mpegts.load();session.mpegts.play().catch(()=>{})}catch{fail('Não foi possível restabelecer o canal MPEG-TS.')} }},1200*session.retries)};
+        try{session.mpegts=window.mpegts.createPlayer({type:'mse',url,isLive:true,cors:true},{enableWorker:true,enableWorkerForMSE:true,enableStashBuffer:false,liveBufferLatencyChasing:true});session.mpegts.on(window.mpegts.Events.ERROR,(_type,detail,info)=>{console.error('mpegts error',{detail,info});reconnect()});session.mpegts.attachMediaElement(v);session.mpegts.load();session.mpegts.play().catch(()=>{});return}catch(error){console.error('mpegts start',error);fail('Falha ao iniciar o leitor MPEG-TS.');return}
+      }
       const safariNative=v.canPlayType('application/vnd.apple.mpegurl')||v.canPlayType('audio/mpegurl');
       if(safariNative){
         const hlsCandidate=url.replace(/\.(ts|mpeg|mpg)(?=($|[?#]))/i,'.m3u8');
@@ -130,14 +138,10 @@ function openPlayer(rawUrl,title,type,id,item){
             }
           }catch(e){console.warn('HLS fallback probe failed',e)}
         }
-        fail('Este servidor fornece o canal em MPEG-TS. O Safari não reproduz MPEG-TS diretamente e o servidor não disponibilizou uma variante HLS (.m3u8).');
+        fail('Este servidor fornece o canal em MPEG-TS. Este dispositivo não reproduz MPEG-TS diretamente (sem MediaSource) e o servidor não disponibilizou uma variante HLS (.m3u8).');
         return;
       }
-      if(!window.mpegts?.createPlayer){fail('A biblioteca local MPEG-TS não foi carregada.');return}
-      let features;try{features=window.mpegts.getFeatureList()}catch{features={}}
-      if(!features.mseLivePlayback){fail('Este dispositivo não disponibiliza MediaSource/Managed Media Source para MPEG-TS. O stream não foi convertido nem confundido com HLS.');return}
-      const reconnect=()=>{if(session.destroyed||session.retries++>=2)return fail('O canal MPEG-TS interrompeu-se após várias tentativas de ligação.');setTimeout(()=>{if(!session.destroyed){try{session.mpegts.unload();session.mpegts.load();session.mpegts.play().catch(()=>{})}catch{fail('Não foi possível restabelecer o canal MPEG-TS.')} }},1200*session.retries)};
-      try{session.mpegts=window.mpegts.createPlayer({type:'mse',url,isLive:true,cors:true},{enableWorker:true,enableWorkerForMSE:true,enableStashBuffer:false,liveBufferLatencyChasing:true});session.mpegts.on(window.mpegts.Events.ERROR,(_type,detail,info)=>{console.error('mpegts error',{detail,info});reconnect()});session.mpegts.attachMediaElement(v);session.mpegts.load();session.mpegts.play().catch(()=>{});return}catch(error){console.error('mpegts start',error);fail('Falha ao iniciar o leitor MPEG-TS.');return}
+      fail('A biblioteca local MPEG-TS não foi carregada ou este dispositivo não disponibiliza MediaSource/Managed Media Source para MPEG-TS.');
     }
     if(kind==='hls'){
       if(v.canPlayType('application/vnd.apple.mpegurl')){v.src=url;v.addEventListener('loadedmetadata',()=>v.play().catch(()=>{}),{once:true});return}
