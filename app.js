@@ -81,7 +81,10 @@ function playItem(id,title,type,direct){
   openPlayer(url,title,type,id,item);
 }
 function playEpisode(id,title,ext){const c=state.cfg;if(!c)return;const url=`${c.server.replace(/\/$/,'')}/series/${encodeURIComponent(c.username)}/${encodeURIComponent(c.password)}/${id}.${ext||'mp4'}`;openPlayer(url,title,'series',id,{container_extension:ext})}
-function mediaUrl(url){if(!url)return '';try{const u=new URL(url,window.location.href);if(u.origin===window.location.origin&&u.pathname.startsWith('/api/'))return u.href;return '/api/proxy?url='+encodeURIComponent(u.href)}catch{return url}}
+// Devolve sempre um URL absoluto: o mpegts.js corre o loader de rede num Web Worker
+// (enableWorker/enableWorkerForMSE), e um URL relativo como "/api/proxy?url=..." não
+// resolve dentro desse worker ("Failed to parse URL"), partindo a reprodução TS via proxy.
+function mediaUrl(url){if(!url)return '';try{const u=new URL(url,window.location.href);if(u.origin===window.location.origin&&u.pathname.startsWith('/api/'))return u.href;return window.location.origin+'/api/proxy?url='+encodeURIComponent(u.href)}catch{return url}}
 function streamKind(ct,url,type,item){const ext=String(item?.container_extension||'').toLowerCase();ct=String(ct||'').toLowerCase();if(ct.includes('mpegurl')||/\.m3u8(?:$|[?#])/i.test(url)||ext==='m3u8')return'hls';if(ct.includes('mp2t')||ext==='ts'||ext==='mpegts'||/\.(ts|mpeg|mpg)(?:$|[?#])/i.test(url))return'mpegts';if(ct.startsWith('video/mp4')||ext==='mp4')return'mp4';return type==='live'?'mpegts':'mp4'}
 function playerHttpError(status){return ({403:'O servidor IPTV recusou o acesso (HTTP 403).',404:'O stream já não existe no servidor (HTTP 404).',502:'Não foi possível contactar o servidor IPTV (HTTP 502).'})[status]||`O servidor respondeu HTTP ${status}.`}
 // Muitos painéis Xtream/XUI bloqueiam pedidos vindos de IPs de datacenter (o nosso proxy Vercel),
